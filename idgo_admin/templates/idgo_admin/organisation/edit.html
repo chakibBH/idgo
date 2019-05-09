@@ -25,13 +25,13 @@
 {% include "idgo_admin/alert_messages.html" %}
 
 <form method="post" action="" enctype="multipart/form-data">
-	{% if organisation in user.profile.referent_for %}
+	{% if organisation in user.referent_for %}
 		{% if not organisation.jurisdiction %}
 	<div class="alert alert-info">
 		<div class="row">
 			<div class="col-xs-12">
 				L'organisation n'est rattachée à aucun territoire de compétence.
-				{% if user.profile.is_crige_admin %}
+				{% if user.is_crige_admin %}
 				Vous pouvez sélectionner le territoire de compétence dans la liste ci-dessous :<br/>
 			</div>
 		</div>
@@ -52,7 +52,7 @@
 		{% endif %}
 	{% endif %}
 	<div class="well">
-		{% if id and user.profile.is_admin %}
+		{% if id and user.is_admin %}
 		<div class="buttons-on-the-right-side">
 			<a class="btn btn-tertiary" href="{% url 'idgo_admin:edit_remote_csw_link' id=id %}">Synchroniser avec un catalogue CSW</a>
 			<a class="btn btn-tertiary" href="{% url 'idgo_admin:edit_remote_ckan_link' id=id %}">Synchroniser avec un catalogue CKAN</a>

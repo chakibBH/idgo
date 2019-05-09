@@ -103,14 +103,14 @@ class OrganisationForm(forms.ModelForm):
         if self.instance and self.instance.logo:
             self.fields['logo'].widget.attrs['value'] = self.instance.logo.url
 
-        if self.instance and not self.user.profile.is_crige_admin:
+        if self.instance and not self.user.is_crige_admin:
             self.fields['jurisdiction'].queryset = \
                 Jurisdiction.objects.filter(pk__in=self.instance.jurisdiction and [self.instance.jurisdiction.pk] or [])
             self.fields['jurisdiction'].widget.attrs['disabled'] = 'disabled'
             self.fields['jurisdiction'].widget.attrs['class'] = 'disabled'
 
     def clean(self):
-        if self.instance and not self.user.profile.is_crige_admin:
+        if self.instance and not self.user.is_crige_admin:
             self.cleaned_data['jurisdiction'] = self.instance.jurisdiction
         return self.cleaned_data
 
@@ -253,6 +253,7 @@ class RemoteCswForm(forms.ModelForm):
                         organisation['display_name'],
                         organisation.get('package_count', organisation.get('packages', None))))
                     for organisation in organisations)
+
         else:
             self.fields['sync_with'].widget = forms.HiddenInput()
             self.fields['sync_frequency'].widget = forms.HiddenInput()

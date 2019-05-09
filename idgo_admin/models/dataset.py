@@ -16,7 +16,7 @@
 
 from django.apps import apps
 from django.conf import settings
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.contrib.gis.db import models
 from django.core.exceptions import ValidationError
 from django.db.models.signals import post_delete
@@ -38,6 +38,7 @@ from taggit.managers import TaggableManager
 from urllib.parse import urljoin
 from uuid import UUID
 
+User = get_user_model()
 
 CKAN_URL = settings.CKAN_URL
 GEONETWORK_URL = settings.GEONETWORK_URL
@@ -82,7 +83,7 @@ class Dataset(models.Model):
     # ===================
 
     editor = models.ForeignKey(
-        User,
+        to=settings.AUTH_USER_MODEL,
         verbose_name="Producteur (propriétaire)",
         )
 
@@ -564,22 +565,22 @@ class Dataset(models.Model):
         Model = apps.get_model(app_label='idgo_admin', model_name='Layer')
         return Model.objects.filter(resource__dataset__pk=self.pk)
 
-    def is_contributor(self, profile):
+    def is_contributor(self, user):
         Model = apps.get_model(app_label='idgo_admin', model_name='LiaisonsContributeurs')
         kvp = {
-            'profile': profile,
+            'user': user,
             'organisation': self.organisation,
             'validated_on__isnull': False,
-            }
+        }
         return Model.objects.filter(**kvp).exists()
 
-    def is_referent(self, profile):
+    def is_referent(self, user):
         Model = apps.get_model(app_label='idgo_admin', model_name='LiaisonsReferents')
         kvp = {
-            'profile': profile,
+            'user': user,
             'organisation': self.organisation,
             'validated_on__isnull': False,
-            }
+        }
         return Model.objects.filter(**kvp).exists()
 
 

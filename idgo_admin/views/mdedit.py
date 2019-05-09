@@ -17,7 +17,6 @@
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import Http404
 from django.http import HttpResponse
 from django.http import HttpResponseRedirect
 from django.shortcuts import redirect
@@ -26,8 +25,6 @@ from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.views import View
-from idgo_admin.exceptions import ExceptionsHandler
-from idgo_admin.exceptions import ProfileHttp404
 from idgo_admin.geonet_module import GeonetUserHandler as geonet
 from idgo_admin.models import Category
 from idgo_admin.models.category import MDEDIT_CONFIG_PATH
@@ -39,9 +36,7 @@ from idgo_admin.models import Dataset
 from idgo_admin.models import Organisation
 from idgo_admin.models import Resource
 from idgo_admin.shortcuts import get_object_or_404
-from idgo_admin.shortcuts import on_profile_http404
 from idgo_admin.shortcuts import render_with_info_profile
-from idgo_admin.shortcuts import user_and_profile
 from idgo_admin.utils import clean_my_obj
 from idgo_admin.utils import open_json_staticfile
 import os
@@ -204,9 +199,7 @@ class DatasetMDEditTplEdit(View):
 
     template = 'idgo_admin/mdedit/template_dataset_edit.html'
 
-    @ExceptionsHandler(ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
     def get(self, request, id, *args, **kwargs):
-        user, profile = user_and_profile(request)
         get_object_or_404(Dataset, id=id)
         return render(request, self.template)
 
@@ -217,9 +210,7 @@ class DatasetMDEdit(View):
     template = 'idgo_admin/mdedit/dataset.html'
     namespace = 'idgo_admin:dataset_mdedit'
 
-    @ExceptionsHandler(ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
     def get(self, request, id, *args, **kwargs):
-        user, profile = user_and_profile(request)
         instance = get_object_or_404(Dataset, id=id)
 
         config = {
@@ -268,10 +259,7 @@ class DatasetMDEdit(View):
 
         return render_with_info_profile(request, self.template, context=context)
 
-    @ExceptionsHandler(ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
     def post(self, request, id, *args, **kwargs):
-
-        user, profile = user_and_profile(request)
 
         dataset = get_object_or_404(Dataset, id=id)
 
@@ -317,9 +305,7 @@ class ServiceMDEditTplEdit(View):
 
     template = 'idgo_admin/mdedit/template_service_edit.html'
 
-    @ExceptionsHandler(ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
     def get(self, request, id, *args, **kwargs):
-        user, profile = user_and_profile(request)
         get_object_or_404(Organisation, id=id, is_active=True)
         return render(request, self.template)
 
@@ -330,9 +316,7 @@ class ServiceMDEdit(View):
     template = 'idgo_admin/mdedit/service.html'
     namespace = 'idgo_admin:service_mdedit'
 
-    @ExceptionsHandler(ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
     def get(self, request, id, *args, **kwargs):
-        user, profile = user_and_profile(request)
         instance = get_object_or_404(Organisation, id=id, is_active=True)
 
         config = {
@@ -380,10 +364,8 @@ class ServiceMDEdit(View):
 
         return render_with_info_profile(request, self.template, context=context)
 
-    @ExceptionsHandler(ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
-    def post(self, request, id, *args, **kwargs):
 
-        user, profile = user_and_profile(request)
+    def post(self, request, id, *args, **kwargs):
 
         instance = get_object_or_404(Organisation, id=id, is_active=True)
 
@@ -422,11 +404,9 @@ class ServiceMDEdit(View):
         return HttpResponse()
 
 
-@ExceptionsHandler(ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
 @login_required(login_url=settings.LOGIN_URL)
 @csrf_exempt
 def mdhandler(request, type, *args, **kwargs):
-    user, profile = user_and_profile(request)
 
     if type == 'dataset':
         target = Dataset

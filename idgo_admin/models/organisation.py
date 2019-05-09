@@ -17,7 +17,7 @@
 from datetime import datetime
 from django.apps import apps
 from django.conf import settings
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.contrib.gis.db import models
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
@@ -41,6 +41,8 @@ from operator import iand
 from operator import ior
 from urllib.parse import urljoin
 import uuid
+
+User = get_user_model()
 
 
 DEFAULT_CONTACT_EMAIL = settings.DEFAULT_CONTACT_EMAIL
@@ -215,27 +217,25 @@ class Organisation(models.Model):
         return Dataset.objects.filter(organisation=self, **kwargs)
 
     def get_crige_membership(self):
-        Profile = apps.get_model(app_label='idgo_admin', model_name='Profile')
-        qs = Profile.objects.filter(organisation=self, crige_membership=True)
-        return [profile.user for profile in qs]
+        qs = User.objects.filter(organisation=self, crige_membership=True)
+        return [user for user in qs]
 
     def get_members(self):
         """Retourner la liste des utilistateurs membres de l'organisation."""
-        Profile = apps.get_model(app_label='idgo_admin', model_name='Profile')
-        profiles = Profile.objects.filter(organisation=self, membership=True, is_active=True)
-        return [e.user for e in profiles]
+        qs = User.objects.filter(organisation=self, membership=True, is_active=True)
+        return [user for user in qs]
 
     def get_contributors(self):
         """Retourner la liste des utilistateurs contributeurs de l'organisation."""
         Nexus = apps.get_model(app_label='idgo_admin', model_name='LiaisonsContributeurs')
         entries = Nexus.objects.filter(organisation=self, validated_on__isnull=False)
-        return [e.profile.user for e in entries if e.profile.is_active]
+        return [e.user for e in entries if e.user.is_active]
 
     def get_referents(self):
         """Retourner la liste des utilistateurs référents de l'organisation."""
         Nexus = apps.get_model(app_label='idgo_admin', model_name='LiaisonsReferents')
         entries = Nexus.objects.filter(organisation=self, validated_on__isnull=False)
-        return [e.profile.user for e in entries if e.profile.is_active]
+        return [e.user for e in entries if e.user.is_active]
 
 
 # Triggers
@@ -249,10 +249,9 @@ def pre_save_organisation(sender, instance, **kwargs):
 @receiver(post_save, sender=Organisation)
 def post_save_organisation(sender, instance, **kwargs):
     # Mettre à jour en cascade les profiles (utilisateurs)
-    Profile = apps.get_model(app_label='idgo_admin', model_name='Profile')
-    for profile in Profile.objects.filter(organisation=instance):
-        profile.crige_membership = instance.is_crige_partner
-        profile.save()
+    for user in User.objects.filter(organisation=instance):
+        user.crige_membership = instance.is_crige_partner
+        user.save()
 
     # Synchroniser avec l'organisation CKAN
     if CkanHandler.is_organisation_exists(str(instance.ckan_id)):

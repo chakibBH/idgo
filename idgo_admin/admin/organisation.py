@@ -63,7 +63,7 @@ class OrganisationAdmin(geo_admin.OSMGeoAdmin):
         'Envoyer e-mail aux utilisateurs CRIGE'
 
     def get_form(self, request, obj=None, **kwargs):
-        if not request.user.is_superuser and not request.user.profile.is_crige_admin:
+        if not request.user.is_superuser and not request.user.is_crige_admin:
             self.form._meta.exclude = ['is_crige_partner']
         return super().get_form(request, obj, **kwargs)
 

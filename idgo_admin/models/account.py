@@ -16,17 +16,17 @@
 
 from django.apps import apps
 from django.conf import settings
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.contrib.gis.db import models
+from django.utils import timezone
 from django.db.models.signals import post_save
 from django.db.models.signals import pre_delete
 from django.dispatch import receiver
 from django.urls import reverse
-from django.utils import timezone
-from idgo_admin.ckan_module import CkanHandler
-import requests
 import uuid
+from idgo_admin.ckan_module import CkanHandler
 
+User = get_user_model()
 
 FTP_SERVICE_URL = settings.FTP_SERVICE_URL
 
@@ -34,170 +34,6 @@ try:
     ADMIN_USERNAME = settings.ADMIN_USERNAME
 except AttributeError:
     ADMIN_USERNAME = None
-
-
-# ==============
-# Classe PROFILE
-# ==============
-
-
-class Profile(models.Model):
-    # TODO: Surcharger la classe User avec Profile
-
-    class Meta(object):
-        verbose_name = "Profil utilisateur"
-        verbose_name_plural = "Profils des utilisateurs"
-
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
-
-    organisation = models.ForeignKey(
-        to='Organisation',
-        verbose_name="Organisation d'appartenance",
-        blank=True,
-        null=True,
-        on_delete=models.SET_NULL,
-        )
-
-    referents = models.ManyToManyField(
-        to='Organisation',
-        through='LiaisonsReferents',
-        related_name='profile_referents',
-        verbose_name="Organisations dont l'utilisateur est réferent",
-        )
-
-    contributions = models.ManyToManyField(
-        to='Organisation',
-        through='LiaisonsContributeurs',
-        related_name='profile_contributions',
-        verbose_name="Organisations dont l'utilisateur est contributeur",
-        )
-
-    phone = models.CharField(
-        verbose_name="Téléphone",
-        max_length=10,
-        blank=True,
-        null=True,
-        )
-
-    is_active = models.BooleanField(
-        verbose_name="Validation suite à confirmation mail par utilisateur",
-        default=False,
-        )
-
-    membership = models.BooleanField(
-        verbose_name="Utilisateur rattaché à une organisation",
-        default=False,
-        )
-
-    crige_membership = models.BooleanField(
-        verbose_name="Utilisateur affilié au CRIGE",
-        default=False,
-        )
-
-    is_admin = models.BooleanField(
-        verbose_name="Administrateur métier",
-        default=False,
-        )
-
-    sftp_password = models.CharField(
-        verbose_name="Mot de passe sFTP",
-        max_length=10,
-        blank=True,
-        null=True,
-        )
-
-    def __str__(self):
-        return "{} ({})".format(self.user.get_full_name(), self.user.username)
-
-    # Propriétés
-    # ==========
-
-    @property
-    def is_agree_with_terms(self):
-        Gdpr = apps.get_model(app_label='idgo_admin', model_name='Gdpr')
-        GdprUser = apps.get_model(app_label='idgo_admin', model_name='GdprUser')
-        try:
-            GdprUser.objects.get(user=self.user, gdpr=Gdpr.objects.latest('issue_date'))
-        except GdprUser.DoesNotExist:
-            return False
-        else:
-            return True
-
-    @property
-    def is_referent(self):
-        kwargs = {'profile': self, 'validated_on__isnull': False}
-        return LiaisonsReferents.objects.filter(**kwargs).exists()
-
-    @property
-    def referent_for(self):
-        return LiaisonsReferents.get_subordinated_organisations(profile=self)
-
-    @property
-    def is_contributor(self):
-        kwargs = {'profile': self, 'validated_on__isnull': False}
-        return LiaisonsContributeurs.objects.filter(**kwargs).exists()
-
-    @property
-    def contribute_for(self):
-        return LiaisonsContributeurs.get_contribs(profile=self)
-
-    @property
-    def is_crige_admin(self):
-        return self.is_admin and self.crige_membership
-
-    @property
-    def is_ftp_account_exists(self):
-        return self.sftp_password and True or False
-
-    # Méthodes de classe
-    # ==================
-
-    @classmethod
-    def get_crige_membership(cls):
-        return Profile.objects.filter(is_active=True, crige_membership=True)
-
-    # Autres méthodes
-    # ===============
-
-    def get_roles(self, organisation=None, dataset=None):
-
-        if organisation:
-            is_referent = LiaisonsReferents.objects.filter(
-                profile=self,
-                organisation=organisation,
-                validated_on__isnull=False).exists()
-        else:
-            is_referent = LiaisonsReferents.objects.filter(
-                profile=self,
-                validated_on__isnull=False).exists()
-
-        return {'is_admin': self.is_admin,
-                'is_referent': is_referent,
-                'is_editor': (self.user == dataset.editor) if dataset else False}
-
-    def is_referent_for(self, organisation):
-        kwargs = {
-            'organisation': organisation,
-            'profile': self,
-            'validated_on__isnull': False}
-        return LiaisonsReferents.objects.filter(**kwargs).exists()
-
-    # Actions sur le compte FTP
-
-    def create_ftp_account(self):
-        params = {'action': 'create', 'login': self.user.username}
-        r = requests.get(FTP_SERVICE_URL, params=params)
-        if r.status_code == 200:
-            details = r.json()
-            self.sftp_password = details.get('message')
-            self.save()
-
-    def delete_ftp_account(self):
-        params = {'action': 'delete', 'login': self.user.username}
-        r = requests.get(FTP_SERVICE_URL, params=params)
-        if r.status_code == 200:
-            self.sftp_password = None
-            self.save()
 
 
 # ==================
@@ -211,11 +47,11 @@ class LiaisonsReferents(models.Model):
         verbose_name = "Statut de référent"
         verbose_name_plural = "Statuts de référent"
         unique_together = (
-            ('profile', 'organisation'),
+            ('user', 'organisation'),
             )
 
-    profile = models.ForeignKey(
-        to='Profile',
+    user = models.ForeignKey(
+        to=settings.AUTH_USER_MODEL,
         verbose_name='Profil utilisateur',
         on_delete=models.CASCADE,
         )
@@ -240,8 +76,8 @@ class LiaisonsReferents(models.Model):
 
     def __str__(self):
         return '{full_name} ({username})--{organisation}'.format(
-            full_name=self.profile.user.get_full_name(),
-            username=self.profile.user.username,
+            full_name=self.user.get_full_name(),
+            username=self.user.username,
             organisation=self.organisation.legal_name,
             )
 
@@ -249,19 +85,19 @@ class LiaisonsReferents(models.Model):
     # ==================
 
     @classmethod
-    def get_subordinated_organisations(cls, profile):
+    def get_subordinated_organisations(cls, user):
 
         # TODO: Sortir le rôle 'admin' (Attention à l'impact que cela peut avoir sur le code)
-        if profile.is_admin:
+        if user.is_admin:
             Organisation = apps.get_model(app_label='idgo_admin', model_name='Organisation')
             return Organisation.objects.filter(is_active=True)
 
-        kwargs = {'profile': profile, 'validated_on__isnull': False}
+        kwargs = {'user': user, 'validated_on__isnull': False}
         return [e.organisation for e in LiaisonsReferents.objects.filter(**kwargs)]
 
     @classmethod
-    def get_pending(cls, profile):
-        kwargs = {'profile': profile, 'validated_on': None}
+    def get_pending(cls, user):
+        kwargs = {'user': user, 'validated_on': None}
         return [e.organisation for e in LiaisonsReferents.objects.filter(**kwargs)]
 
 
@@ -271,11 +107,11 @@ class LiaisonsContributeurs(models.Model):
         verbose_name = "Statut de contributeur"
         verbose_name_plural = "Statuts de contributeur"
         unique_together = (
-            ('profile', 'organisation'),
+            ('user', 'organisation'),
             )
 
-    profile = models.ForeignKey(
-        to='Profile',
+    user = models.ForeignKey(
+        to=settings.AUTH_USER_MODEL,
         verbose_name="Profil utilisateur",
         on_delete=models.CASCADE,
         )
@@ -299,8 +135,8 @@ class LiaisonsContributeurs(models.Model):
 
     def __str__(self):
         return '{full_name} ({username})--{organisation}'.format(
-            full_name=self.profile.user.get_full_name(),
-            username=self.profile.user.username,
+            full_name=self.user.get_full_name(),
+            username=self.user.username,
             organisation=self.organisation.legal_name,
             )
 
@@ -308,18 +144,18 @@ class LiaisonsContributeurs(models.Model):
     # ==================
 
     @classmethod
-    def get_contribs(cls, profile):
-        kwargs = {'profile': profile, 'validated_on__isnull': False}
+    def get_contribs(cls, user):
+        kwargs = {'user': user, 'validated_on__isnull': False}
         return [e.organisation for e in LiaisonsContributeurs.objects.filter(**kwargs)]
 
     @classmethod
     def get_contributors(cls, organisation):
         kwargs = {'organisation': organisation, 'validated_on__isnull': False}
-        return [e.profile for e in LiaisonsContributeurs.objects.filter(**kwargs)]
+        return [e.user for e in LiaisonsContributeurs.objects.filter(**kwargs)]
 
     @classmethod
-    def get_pending(cls, profile):
-        kwargs = {'profile': profile, 'validated_on': None}
+    def get_pending(cls, user):
+        kwargs = {'user': user, 'validated_on': None}
         return [e.organisation for e in LiaisonsContributeurs.objects.filter(**kwargs)]
 
 
@@ -389,8 +225,8 @@ class AccountActions(models.Model):
         null=True,
         )
 
-    profile = models.ForeignKey(
-        to='Profile',
+    user = models.ForeignKey(
+        to=settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         blank=True,
         null=True,
@@ -450,11 +286,11 @@ def delete_ckan_user(sender, instance, **kwargs):
     CkanHandler.del_user(instance.username)
 
 
-@receiver(post_save, sender=Profile)
+@receiver(post_save, sender=User)
 def handle_crige_partner(sender, instance, **kwargs):
     groupname = 'crige-partner'
 
-    username = instance.user.username
+    username = instance.username
     if CkanHandler.is_user_exists(username):
         if instance.crige_membership:
             CkanHandler.add_user_to_partner_group(username, groupname)

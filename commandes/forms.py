@@ -17,8 +17,9 @@
 from commandes.models import Order
 from django import forms
 from django.utils import timezone
-from idgo_admin.models import Organisation
-from idgo_admin.models import Profile
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
 
 
 class CustomClearableFileInput(forms.ClearableFileInput):
@@ -56,23 +57,20 @@ class OrderForm(forms.ModelForm):
         checks if the user has already ordered files
         (order status = 'validée') in the current year
         """
+
         cleaned_data = super(OrderForm, self).clean()
 
         year = timezone.now().date().year
 
-        organisation = Organisation.objects.get(id=Profile.objects.get(user_id=self.user).organisation_id)
-
         match = Order.objects.filter(
-                date__year=year,
-                organisation=organisation,
-                status=1
-                )
+            date__year=year,
+            applicant=self.user,
+            status=1
+        )
 
-        er_mess = ("Une demande a déjà été approuvée pour cette organisation"
-                    " dans l'année civile en cours.")
-
-        if (match):
-            # self.add_error('__all__',er_mess)
-            raise forms.ValidationError(er_mess)
+        if match.exists():
+            raise forms.ValidationError(
+                "Une demande a déjà été approuvée pour cette organisation"
+                " dans l'année civile en cours.")
         else:
             return cleaned_data

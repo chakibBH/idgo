@@ -15,7 +15,8 @@
 
 
 from django.apps import apps
-from django.contrib.auth.models import User
+from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.contrib.gis.db import models
 from django.contrib.postgres.fields import JSONField
 from django.db.models.signals import pre_init
@@ -25,6 +26,8 @@ from idgo_admin.models.mail import send_extraction_failure_mail
 from idgo_admin.models.mail import send_extraction_successfully_mail
 import requests
 import uuid
+
+User = get_user_model()
 
 
 class ExtractorSupportedFormat(models.Model):
@@ -78,7 +81,7 @@ class AsyncExtractorTask(models.Model):
         )
 
     user = models.ForeignKey(
-        to=User,
+        to=settings.AUTH_USER_MODEL,
         )
 
     foreign_value = models.CharField(

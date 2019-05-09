@@ -13,12 +13,13 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-
-from django.contrib.auth.models import User
+from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.validators import FileExtensionValidator
 from django.db import models
 from django.utils import timezone
 
+User = get_user_model()
 
 TODAY = timezone.now().date()
 
@@ -45,10 +46,10 @@ class Order(models.Model):
         )
 
     applicant = models.ForeignKey(
-        User,
+        to=settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         verbose_name='Demandeur',
-        limit_choices_to={'profile__crige_membership': True}
+        limit_choices_to={'crige_membership': True}
         )
 
     dpo_cnil = models.FileField(

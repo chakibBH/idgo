@@ -19,7 +19,7 @@
 				Votre ressource fait l'objet d'une couche géographique publiée à travers l'API OGC de votre organisation. Ce service est disponible à l'adresse suivante :
 				<a target="_blank" href="{{ resource.dataset.organisation.ows_url }}">{{ resource.dataset.organisation.ows_url }}</a>
 			</p>
-			{% if not user.profile.crige_membership %}
+			{% if not user.crige_membership %}
 			<p>Pour configurer votre service, veuillez contacter le CRIGE.</p>
 			{% endif %}
 		</div>
@@ -141,7 +141,7 @@
 					{% bootstrap_field form.referenced_url show_label=False %}
 				</div>
 				<div role="tabpanel" class="tab-pane" id="ftp_file">
-				{% if user.profile.is_ftp_account_exists %}
+				{% if user.is_ftp_account_exists %}
 					<p>{{ form.ftp_file.label }}</p>
 					{% bootstrap_field form.ftp_file show_label=False %}
 					<div class="row">
@@ -227,7 +227,7 @@
 				<div class="form-group">
 					<div class="checkbox">
 						<label for="id_{{ form.geo_restriction.name }}">
-						{% if not user.profile.crige_membership %}
+						{% if not user.crige_membership %}
 							{% include "idgo_admin/extras/crige_restricted_access/checkbox.html" with type="checkbox" name=form.geo_restriction.name checked=form.geo_restriction.value %}
 						{% else %}
 							{{ form.geo_restriction }}
@@ -243,7 +243,7 @@
 				<div class="form-group">
 					<div class="checkbox">
 						<label for="id_{{ form.ogc_services.name }}">
-						{% if not user.profile.crige_membership %}
+						{% if not user.crige_membership %}
 							{% include "idgo_admin/extras/crige_restricted_access/checkbox.html" with type="checkbox" name=form.ogc_services.name checked=form.ogc_services.value %}
 						{% else %}
 							{{ form.ogc_services }}
@@ -259,7 +259,7 @@
 				<div class="form-group">
 					<div class="checkbox">
 						<label for="id_{{ form.extractable.name }}">
-						{% if not user.profile.crige_membership %}
+						{% if not user.crige_membership %}
 							{% include "idgo_admin/extras/crige_restricted_access/checkbox.html" with type="checkbox" name=form.extractable.name checked=form.extractable.value %}
 						{% else %}
 							{{ form.extractable }}

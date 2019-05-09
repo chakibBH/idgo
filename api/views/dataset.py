@@ -102,10 +102,10 @@ def serialize(dataset):
 
 def handler_get_request(request):
     user = request.user
-    if user.profile.is_admin:
+    if user.is_admin:
         datasets = Dataset.objects.all()
     else:
-        s1 = set(Dataset.objects.filter(organisation__in=user.profile.referent_for))
+        s1 = set(Dataset.objects.filter(organisation__in=user.referent_for))
         s2 = set(Dataset.objects.filter(editor=user))
         datasets = list(s1 | s2)
     return datasets

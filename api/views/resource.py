@@ -16,7 +16,7 @@
 
 from api.utils import parse_request
 from collections import OrderedDict
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import Http404
@@ -36,6 +36,8 @@ from idgo_admin.shortcuts import get_object_or_404_extended
 from rest_framework import permissions
 from rest_framework.views import APIView
 from uuid import UUID
+
+User = get_user_model()
 
 
 def serialize(resource):
@@ -83,10 +85,10 @@ def serialize(resource):
 def handler_get_request(request, dataset_name):
     user = request.user
     dataset = None
-    if user.profile.is_admin:
+    if user.is_admin:
         dataset = Dataset.objects.get(slug=dataset_name)
     else:
-        s1 = set(Dataset.objects.filter(organisation__in=user.profile.referent_for))
+        s1 = set(Dataset.objects.filter(organisation__in=user.referent_for))
         s2 = set(Dataset.objects.filter(editor=user))
         for item in list(s1 | s2):
             if item.slug == dataset_name:

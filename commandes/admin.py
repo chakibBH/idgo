@@ -65,12 +65,12 @@ class OrderAdmin(admin.ModelAdmin):
 
     def terr(self, obj):
         if obj:
-            return obj.applicant.profile.organisation.jurisdiction
+            return obj.applicant.organisation.jurisdiction
     terr.short_description = 'Territoire de compétences'
 
     def orga(self, obj):
         if obj:
-            return obj.applicant.profile.organisation
+            return obj.applicant.organisation
     orga.short_description = 'Organisation'
 
     def user_full_name(self, obj):

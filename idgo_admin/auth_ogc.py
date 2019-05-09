@@ -27,10 +27,11 @@ sys.path.append(python_home)
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 import django  # noqa: E402
 django.setup()
-from django.contrib.auth.models import User  # noqa: E402
+from django.contrib.auth import get_user_model
 from idgo_admin.models import Dataset  # noqa: E402
 from idgo_admin.models import Resource  # noqa: E402
 
+User = get_user_model()
 logger = logging.getLogger('auth_ogc')
 stream_handler = logging.StreamHandler()
 # stream_handler.setLevel(logging.DEBUG)

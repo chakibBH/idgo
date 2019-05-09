@@ -17,13 +17,6 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.conf.urls import url
-from idgo_admin.views.account import create_sftp_account
-from idgo_admin.views.account import delete_account
-from idgo_admin.views.account import delete_sftp_account
-from idgo_admin.views.account import PasswordManager
-from idgo_admin.views.account import ReferentAccountManager
-from idgo_admin.views.account import SignUp
-from idgo_admin.views.account import UpdateAccount
 from idgo_admin.views.action import ActionsManager
 from idgo_admin.views.dataset import DatasetManager
 from idgo_admin.views.dataset import list_all_ckan_harvested_datasets
@@ -35,7 +28,6 @@ from idgo_admin.views.export import Export
 from idgo_admin.views.extractor import Extractor
 from idgo_admin.views.extractor import extractor_task
 from idgo_admin.views.extractor import ExtractorDashboard
-from idgo_admin.views.gdpr import GdprView
 from idgo_admin.views import home
 from idgo_admin.views.jurisdiction import jurisdiction
 from idgo_admin.views.jurisdiction import jurisdictions
@@ -74,13 +66,6 @@ from idgo_admin.views.stuffs import ows_preview
 urlpatterns = [
     url('^$', home, name='home'),
 
-    url('^account/create/?$', SignUp.as_view(), name='sign_up'),
-    url('^account/update/?$', UpdateAccount.as_view(), name='update_account'),
-    url('^account/delete/?$', delete_account, name='deleteAccount'),
-
-    url('^account/sftp/create/?$', create_sftp_account, name='create_sftp_account'),
-    url('^account/sftp/delete/?$', delete_sftp_account, name='delete_sftp_account'),
-
     url('^dataset/?$', list_dataset, name='dataset'),  # ?id=[<dataset.pk>|<dataset.slug>]
     url('^dataset/mine/?$', list_my_datasets, name='list_my_datasets'),
     url('^dataset/all/?$', list_all_datasets, name='list_all_datasets'),
@@ -101,8 +86,6 @@ urlpatterns = [
     url('^extractor/task/?$', extractor_task, name='extractor_task'),
     url('^extractor/dashboard/?$', ExtractorDashboard.as_view(), name='extractor_dashboard'),
 
-    url('^terms/?$', GdprView.as_view(), name='terms_agreement'),
-
     url('^jurisdiction/?$', jurisdiction, name='jurisdiction'),
     url('^jurisdiction/all/?$', jurisdictions, name='jurisdictions'),
     url('^jurisdiction/(?P<code>(for|new|(.+)))/edit/?$', JurisdictionView.as_view(), name='jurisdiction_editor'),
@@ -112,8 +95,6 @@ urlpatterns = [
     url('^mdedit/dataset/(?P<id>(\d+))/edit/?$', DatasetMDEditTplEdit.as_view(), name='dataset_mdedit_tpl_edit'),
     url('^mdedit/service/(?P<id>(\d+))/?$', ServiceMDEdit.as_view(), name='service_mdedit'),
     url('^mdedit/service/(?P<id>(\d+))/edit/?$', ServiceMDEditTplEdit.as_view(), name='service_mdedit_tpl_edit'),
-
-    url('^member/all/?$', ReferentAccountManager.as_view(), name='all_members'),
 
     url('^organisation/all/?$', all_organisations, name='all_organisations'),
     url('^organisation/new/?$', CreateOrganisation.as_view(), name='create_organisation'),
@@ -129,9 +110,6 @@ urlpatterns = [
     url('^organisation/(?P<id>(\d+))/remoteckan/delete/?$', DeleteRemoteCkanLinked.as_view(), name='delete_remote_ckan_link'),
     url('^organisation/(?P<id>(\d+))/remotecsw/edit/?$', RemoteCswEditor.as_view(), name='edit_remote_csw_link'),
     url('^organisation/(?P<id>(\d+))/remotecsw/delete/?$', DeleteRemoteCswLinked.as_view(), name='delete_remote_csw_link'),
-
-    url('^password/(?P<process>(forget))/?$', PasswordManager.as_view(), name='password_manager'),
-    url('^password/(?P<process>(initiate|reset))/(?P<key>(.+))/?$', PasswordManager.as_view(), name='password_manager'),
 
     url('^confirmation/email/(?P<key>.+)/?$', confirmation_mail, name='confirmation_mail'),
     url('^confirmation/createorganisation/(?P<key>.+)/?$', confirm_new_orga, name='confirm_new_orga'),

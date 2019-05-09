@@ -19,7 +19,9 @@ from django.utils import timezone
 from idgo_admin.models import AccountActions
 from idgo_admin.models import LiaisonsContributeurs
 from idgo_admin.models import LiaisonsReferents
+import logging
 
+logger = logging.getLogger('django')
 
 class Command(BaseCommand):
 
@@ -34,58 +36,54 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
 
         del_org = []
-        del_profile = []
+        del_user = []
         old_actions = AccountActions.objects.filter(
             closed=None, created_on__lte=self.n_days_ago(2))
 
         for act in old_actions:
             pro_name, org_name = 'N/A', 'N/A'
 
-            if act.profile.user:
-                pro_name = act.profile.user.username
-            if act.profile.organisation:
-                org_name = act.profile.organisation.legal_name
+            if act.user:
+                pro_name = act.user.username
+            if act.user.organisation:
+                org_name = act.user.organisation.legal_name
 
             if act.action == 'confirm_rattachement':
-                print("clean_up_action Rattachement: {0}".format(pro_name))
+                logger.info("clean_up_action Rattachement: {0}".format(pro_name))
 
             if act.action == 'confirm_mail':
-                print("clean_up_action Profile: {0}".format(pro_name))
-                del_profile.append(act.profile)
+                logger.info("clean_up_action User: {0}".format(pro_name))
+                del_user.append(act.user)
 
             if act.action == 'confirm_new_organisation':
-                print("clean_up_action - New Orga: {0}".format(org_name))
-                del_org.append(act.profile.organisation)
+                logger.info("clean_up_action - New Orga: {0}".format(org_name))
+                del_org.append(act.user.organisation)
 
             if act.action == 'confirm_contribution':
                 liaison = LiaisonsContributeurs.objects.get(
-                    profile=act.profile, organisation=act.organisation)
-                print("clean_up_action contribution: {0}-{1}".format(
+                    user=act.user, organisation=act.organisation)
+                logger.info("clean_up_action contribution: {0}-{1}".format(
                     pro_name, act.organisation.legal_name))
                 liaison.delete()
 
             if act.action == 'confirm_referent':
                 liaison = LiaisonsReferents.objects.get(
-                    profile=act.profile, organisation=act.organisation)
-                print("clean_up_action referent: {0}-{1}".format(
+                    user=act.user, organisation=act.organisation)
+                logger.info("clean_up_action referent: {0}-{1}".format(
                     pro_name, act.organisation.legal_name))
                 liaison.delete()
 
             if act.action == 'reset_password':
-                print("clean_up_action Reset Password: {0}".format(act))
+                logger.info("clean_up_action Reset Password: {0}".format(act))
 
             act.delete()
 
         # Fait en second pour ne pas 'casser' la boucle précédente,
         # à cause des cascade_on_delete
-        for p in del_profile:
-
-            print("clean_up db - Profile: {0}".format(p.user.username))
-            u = p.user
-            p.delete()
-            print("clean_up db - User: {0}".format(u.username))
+        for u in del_user:
+            logger.info("clean_up db - User: {0}".format(u.username))
             u.delete()
 
         for o in del_org:
-            print("clean_up db - New Orga: {0}".format(o.name))
+            logger.info("clean_up db - New Orga: {0}".format(o.name))
             o.delete()

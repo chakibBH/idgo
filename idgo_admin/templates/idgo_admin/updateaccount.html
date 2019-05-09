@@ -11,7 +11,7 @@
 
 {% block nav_content_extra %}
 <li role="presentation" name="account">
-	<a href="{% url "idgo_admin:update_account" %}" role="tab">Mon profil</a>
+	<a href="{% url "auth_users:update_account" %}" role="tab">Mon profil</a>
 </li>
 {% endblock nav_content_extra %}
 
@@ -54,7 +54,7 @@
 		</div>
 	</div>
 	<div class="buttons-on-the-right-side">
-		<a class="btn btn-default" href="{% url "idgo_admin:update_account" %}">Annuler</a>
+		<a class="btn btn-default" href="{% url "auth_users:update_account" %}">Annuler</a>
 		<button type="submit" class="btn btn-primary">Valider</button>
 	</div>
 </form>
@@ -62,14 +62,14 @@
 <div class="well">
 	<h4 class="modal-title">Compte FTP</h4>
 	<br />
-{% if not user.profile.is_ftp_account_exists %}
+{% if not user.is_ftp_account_exists %}
 	<p>Votre compte FTP n'est pas encore activé.</p>
-	<a class="btn btn-default" href="{% url "idgo_admin:create_sftp_account" %}">Créer mon compte FTP</a>
+	<a class="btn btn-default" href="{% url "auth_users:create_sftp_account" %}">Créer mon compte FTP</a>
 {% else %}
 	<p>Adresse FTP : <strong>{{ ftp_url }}</strong></p>
-	<p>Votre compte FTP est activé : <em>compte utilisateur</em> <strong>{{ user.username }}</strong> / <em>mot de passe</em> <strong>{{ user.profile.sftp_password }}</strong></p>
+	<p>Votre compte FTP est activé : <em>compte utilisateur</em> <strong>{{ user.username }}</strong> / <em>mot de passe</em> <strong>{{ user.sftp_password }}</strong></p>
 	<p>Attention, l'accès à ce compte FTP est sécurisé. Il ne peut se faire qu'avec le protocole SFTP (sur le port 22), donc avec une application spécifique comme FileZilla (<a class="link" href="https://filezilla-project.org">https://filezilla-project.org</a>)</p>
-	<a class="btn btn-default" href="{% url "idgo_admin:delete_sftp_account" %}">Supprimer mon compte FTP</a></li>
+	<a class="btn btn-default" href="{% url "auth_users:delete_sftp_account" %}">Supprimer mon compte FTP</a></li>
 {% endif %}
 </div>
 
@@ -78,12 +78,12 @@
 	<br />
 	<p>Attention, cette action est irreversible et supprimera <strong>définitivement</strong> votre compte.</p>
 	<div>
-		<a class="btn btn-danger" href="{% url "idgo_admin:deleteAccount" %}">Je souhaite supprimer mon compte</a></li>
+		<a class="btn btn-danger" href="{% url "auth_users:deleteAccount" %}">Je souhaite supprimer mon compte</a></li>
 	</div>
 </div>
 <script>
 $(function() {
-	$('#menu a[href="{% url "idgo_admin:update_account" %}"]').parent().addClass('active');
+	$('#menu a[href="{% url "auth_users:update_account" %}"]').parent().addClass('active');
 });
 </script>
 {% endblock main_content %}

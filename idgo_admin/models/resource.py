@@ -25,7 +25,7 @@ from django.db import IntegrityError
 from django.db.models.signals import post_delete
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from django.http import Http404
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 from functools import reduce
 from idgo_admin.ckan_module import CkanHandler
@@ -58,6 +58,9 @@ from urllib.parse import urljoin
 import uuid
 
 
+User = get_user_model()
+
+
 try:
     DOWNLOAD_SIZE_LIMIT = settings.DOWNLOAD_SIZE_LIMIT
 except AttributeError:
@@ -86,10 +89,9 @@ CKAN_URL = settings.CKAN_URL
 
 
 def get_all_users_for_organisations(list_id):
-    Profile = apps.get_model(app_label='idgo_admin', model_name='Profile')
     return [
-        profile.user.username
-        for profile in Profile.objects.filter(
+        user.username
+        for user in User.objects.filter(
             organisation__in=list_id, organisation__is_active=True)]
 
 
@@ -282,7 +284,7 @@ class Resource(models.Model):
         )
 
     profiles_allowed = models.ManyToManyField(
-        to='Profile',
+        to=settings.AUTH_USER_MODEL,
         verbose_name='Utilisateurs autorisés',
         blank=True,
         )
@@ -440,7 +442,7 @@ class Resource(models.Model):
         # Quelques valeur par défaut à la création de l'instance
         if created or not (
                 # Ou si l'éditeur n'est pas partenaire du CRIGE
-                current_user and current_user.profile.crige_membership):
+                current_user and current_user.crige_membership):
 
             # Mais seulement s'il s'agit de données SIG, sauf
             # qu'on ne le sait pas encore...
@@ -881,7 +883,7 @@ class Resource(models.Model):
             restricted = json.dumps({
                 'allowed_users': ','.join(
                     self.profiles_allowed.exists() and [
-                        p.user.username for p
+                        user.username for user
                         in self.profiles_allowed.all()] or []),
                 'level': 'only_allowed_users'})
         # (3) Les utilisateurs de cette organisation
@@ -951,16 +953,16 @@ class Resource(models.Model):
             layer.handle_enable_ows_status()
 
     def is_profile_authorized(self, user):
-        Profile = apps.get_model(app_label='idgo_admin', model_name='Profile')
+
         if not user.pk:
             raise IntegrityError('User does not exists')
         if self.restricted_level == 'only_allowed_users' and self.profiles_allowed.exists():
-            return user in [
-                p.user for p in self.profiles_allowed.all()]
+            return user in self.profiles_allowed.all()
         elif self.restricted_level in ('same_organization', 'any_organization') and self.organisations_allowed.exists():
-            return user in [p.user for p in Profile.objects.filter(
+            return User.objects.filter(
+                pk=user.pk,
                 organisation__in=self.organisations_allowed.all(),
-                organisation__is_active=True)]
+                organisation__is_active=True).exists()
         return True
 
 

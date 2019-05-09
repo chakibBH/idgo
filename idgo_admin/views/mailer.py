@@ -47,16 +47,14 @@ def confirmation_mail(request, key):
         return render(
             request, 'idgo_admin/message.html', {'message': message}, status=200)
 
-    user = action.profile.user
-    profile = action.profile
-    organisation = profile.organisation
+    user = action.user
+    organisation = action.user.organisation
 
     CkanHandler.activate_user(user.username)
     user.is_active = True
-    action.profile.is_active = True
 
     user.save()
-    action.profile.save()
+
     if organisation:
         # Demande de création d'une nouvelle organisation
         if not organisation.is_active:
@@ -64,7 +62,7 @@ def confirmation_mail(request, key):
                 AccountActions,
                 action='confirm_new_organisation',
                 organisation=organisation,
-                profile=profile,
+                user=user,
                 closed=None)
 
             url = request.build_absolute_uri(
@@ -77,7 +75,7 @@ def confirmation_mail(request, key):
             AccountActions,
             action='confirm_rattachement',
             organisation=organisation,
-            profile=profile,
+            user=user,
             closed=None)
 
         url = request.build_absolute_uri(
@@ -90,7 +88,7 @@ def confirmation_mail(request, key):
         try:
             LiaisonsReferents.objects.get(
                 organisation=organisation,
-                profile=profile,
+                user=user,
                 validated_on=None)
         except Exception:
             pass
@@ -99,7 +97,7 @@ def confirmation_mail(request, key):
                 AccountActions,
                 action='confirm_referent',
                 organisation=organisation,
-                profile=profile,
+                user=user,
                 closed=None)
 
             url = request.build_absolute_uri(
@@ -109,7 +107,7 @@ def confirmation_mail(request, key):
         # Demande de rôle de contributeur en attente de validation
         try:
             LiaisonsContributeurs.objects.get(
-                profile=profile,
+                user=user,
                 organisation=organisation,
                 validated_on=None)
         except Exception:
@@ -119,7 +117,7 @@ def confirmation_mail(request, key):
                 AccountActions,
                 action='confirm_contribution',
                 organisation=organisation,
-                profile=profile,
+                user=user,
                 closed=None)
             url = request.build_absolute_uri(
                 reverse('idgo_admin:confirm_contribution', kwargs={'key': contribution_action.key}))
@@ -138,7 +136,7 @@ def confirmation_mail(request, key):
     context = {
         'message': message,
         'button': {
-            'href': reverse('server_cas:signIn'),
+            'href': reverse('auth_users:signIn'),
             'label': 'Se connecter'}}
 
     return render(request, 'idgo_admin/message.html', context, status=200)
@@ -178,10 +176,10 @@ def confirm_rattachement(request, key):
         AccountActions, key=UUID(key), action='confirm_rattachement')
 
     if action.closed:
-        action.profile.membership = True
-        action.profile.save()
+        user = action.user
+        user.membership = True
+        user.save()
         name = action.organisation.legal_name
-        user = action.profile.user
         message = (
             "Le rattachement de <strong>{first_name} {last_name}</strong> (<strong>{username}</strong>) "
             "à l'organisation <strong>{organisation_name}</strong> a déjà été confirmée."
@@ -190,8 +188,8 @@ def confirm_rattachement(request, key):
                      username=user.username,
                      organisation_name=name)
     else:
+        user = action.user
         name = action.organisation.legal_name
-        user = action.profile.user
         if not action.organisation.is_active:
             message = (
                 '<span class="text-is-red">Le rattachement de '
@@ -206,10 +204,10 @@ def confirm_rattachement(request, key):
                          username=user.username,
                          organisation_name=name)
         else:
-            action.profile.membership = True
-            action.profile.organisation = action.organisation
-            action.profile.crige_membership = action.profile.organisation.is_crige_partner
-            action.profile.save()
+            user.membership = True
+            user.organisation = action.organisation
+            user.crige_membership = action.profile.organisation.is_crige_partner
+            user.save()
             action.closed = timezone.now()
             action.save()
 
@@ -233,7 +231,7 @@ def confirm_referent(request, key):
         AccountActions, key=UUID(key), action='confirm_referent')
 
     organisation = action.organisation
-    user = action.profile.user
+    user = action.user
     if action.closed:
         status = 200
         message = (
@@ -245,7 +243,7 @@ def confirm_referent(request, key):
     else:
         try:
             ref_liaison = LiaisonsReferents.objects.get(
-                profile=action.profile, organisation=organisation)
+                user=action.user, organisation=organisation)
         except Exception:
             status = 400
             message = ("Erreur lors de la validation du role de réferent")
@@ -265,7 +263,7 @@ def confirm_referent(request, key):
             else:
                 # Fix confirmation referent == confirmation LiaisonContributeur
                 try:
-                    contrib_me = LiaisonsContributeurs.objects.get(profile=action.profile, organisation=organisation)
+                    contrib_me = LiaisonsContributeurs.objects.get(user=action.user, organisation=organisation)
                 except Exception:
                     status = 400
                     message = ("Erreur lors de la confirmation du rôle de contributeur")
@@ -297,25 +295,25 @@ def confirm_contribution(request, key):
     action = get_object_or_404(
         AccountActions, key=UUID(key), action='confirm_contribution')
     organisation = action.organisation
+    user = action.user
 
     if action.closed:
         message = (
             "Le rôle de contributeur pour l'organisation <strong>{organisation_name}</strong> "
             "a déjà été confirmée pour <strong>{username}</strong>."
             ).format(organisation_name=organisation.legal_name,
-                     username=action.profile.user.username)
+                     username=user.username)
         status = 200
 
     else:
         try:
             contrib_liaison = LiaisonsContributeurs.objects.get(
-                profile=action.profile, organisation=organisation)
+                user=user, organisation=organisation)
         except Exception:
             message = ("Erreur lors de la validation du rôle de contributeur")
             status = 400
 
         else:
-            user = action.profile.user
             if not organisation.is_active:
                 message = (
                     '<span class="text-is-red">Le statut de contributeur pour '

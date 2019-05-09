@@ -17,11 +17,10 @@
 from django.conf import settings
 from django.contrib.auth import login
 from django.contrib.auth import logout
-from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from idgo_admin.forms.account import SignInForm
+from auth_users.forms.account import SignInForm
 from mama_cas.compat import is_authenticated as mama_is_authenticated
 from mama_cas.models import ProxyGrantingTicket as MamaProxyGrantingTicket
 from mama_cas.models import ProxyTicket as MamaProxyTicket
@@ -35,7 +34,7 @@ from mama_cas.views import LogoutView as MamaLogoutView
 @method_decorator(csrf_exempt, name='dispatch')
 class SignIn(MamaLoginView):
 
-    template_name = 'idgo_admin/signin.html'
+    template_name = 'auth_users/signin.html'
     form_class = SignInForm
 
     def get(self, request, *args, **kwargs):

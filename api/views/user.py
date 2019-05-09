@@ -16,7 +16,7 @@
 
 from api.utils import parse_request
 from collections import OrderedDict
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.db import transaction
@@ -28,14 +28,15 @@ from functools import reduce
 from idgo_admin.ckan_module import CkanHandler
 from idgo_admin.exceptions import CkanBaseError
 from idgo_admin.exceptions import GenericException
-from idgo_admin.forms.account import SignUpForm
-from idgo_admin.forms.account import UpdateAccountForm
+from auth_users.forms.account import SignUpForm
+from auth_users.forms.account import UpdateAccountForm
 from idgo_admin.models import Organisation
-from idgo_admin.models import Profile
 from operator import iand
 from operator import ior
 from rest_framework import permissions
 from rest_framework.views import APIView
+
+User = get_user_model()
 
 
 def serialize(user):
@@ -49,23 +50,23 @@ def serialize(user):
             ('username', user.username),
             ('first_name', user.first_name),
             ('last_name', user.last_name),
-            ('admin', user.profile.is_admin),
-            ('crige', user.profile.crige_membership),
+            ('admin', user.is_admin),
+            ('crige', user.crige_membership),
             # Organisation de rattachement de l'utilisateur
-            ('organisation', user.profile.organisation and OrderedDict([
-                ('name', user.profile.organisation.slug),
-                ('legal_name', user.profile.organisation.legal_name)
+            ('organisation', user.organisation and OrderedDict([
+                ('name', user.organisation.slug),
+                ('legal_name', user.organisation.legal_name)
                 ]) or None),
             # Listes des organisations pour lesquelles l'utilisateur est référent
             ('referent', nullify([OrderedDict([
                 ('name', organisation.slug),
                 ('legal_name', organisation.legal_name)
-                ]) for organisation in user.profile.referent_for])),
+                ]) for organisation in user.referent_for])),
             # Listes des organisations pour lesquelles l'utilisateur est contributeur
             ('contribute', nullify([OrderedDict([
                 ('name', organisation.slug),
                 ('legal_name', organisation.legal_name)
-                ]) for organisation in user.profile.contribute_for]))
+                ]) for organisation in user.contribute_for]))
             ])
     except Exception as e:
         if e.__class__.__name__ == 'RelatedObjectDoesNotExist':
@@ -74,8 +75,6 @@ def serialize(user):
 
 
 def user_list(order_by='last_name', or_clause=None, **and_clause):
-
-    and_clause.update({'profile__pk__isnull': False})
 
     l1 = [Q(**{k: v}) for k, v in and_clause.items()]
     if or_clause:
@@ -92,13 +91,13 @@ def handler_get_request(request):
     or_clause = dict()
 
     user = request.user
-    if user.profile.is_admin:
+    if user.is_admin:
         # Un administrateur « métiers » peut tout voir.
         pass
-    elif user.profile.is_referent:
+    elif user.is_referent:
         # Un référent « métiers » peut voir les utilisateurs des
         # organisations pour lesquelles il est référent.
-        qs.update({'profile__organisation__in': user.profile.referent_for})
+        qs.update({'organisation__in': user.referent_for})
         or_clause.update({'username': user.username})
     else:
         # L'utilisateur peut se voir lui même.
@@ -148,13 +147,13 @@ def handle_pust_request(request, username=None):
                     setattr(user, k, v)
                 user.save()
                 if phone:
-                    user.profile.phone = phone
-                    user.profile.save
+                    user.phone = phone
+                    user.save()
                 CkanHandler.update_user(user)
             else:
                 user = User.objects.create_user(**form.cleaned_user_data)
-                profile_data = {**form.cleaned_profile_data, **{'user': user, 'is_active': True}}
-                Profile.objects.create(**profile_data)
+                user.is_active = True
+                user.save()
                 CkanHandler.add_user(user, form.cleaned_user_data['password'], state='active')
     except (ValidationError, CkanBaseError) as e:
         raise GenericException(details=e.__str__())
@@ -178,7 +177,7 @@ class UserShow(APIView):
     def put(self, request, username):
         """Mettre à jour un utilisateur."""
         request.PUT, request._files = parse_request(request)
-        if not request.user.profile.is_admin:
+        if not request.user.is_admin:
             raise Http404()
         try:
             handle_pust_request(request, username=username)
@@ -196,14 +195,12 @@ class UserList(APIView):
         ]
 
     def get(self, request):
-        if not hasattr(request.user, 'profile'):
-            raise Http404()
         data = handler_get_request(request)
         return JsonResponse(data, safe=False)
 
     def post(self, request):
         """Créer un utilisateur."""
-        if not request.user.profile.is_admin:
+        if not request.user.is_admin:
             raise Http404()
         try:
             handle_pust_request(request)

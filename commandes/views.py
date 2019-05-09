@@ -22,9 +22,7 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
 from idgo_admin.models.mail import sender as mail_sender
-from idgo_admin.models import Organisation
-from idgo_admin.models import Profile
-from idgo_admin.shortcuts import user_and_profile
+from django.contrib.auth.decorators import user_passes_test
 
 
 # CKAN_URL = settings.CKAN_URL
@@ -36,23 +34,24 @@ TODAY = timezone.now().date()
 CADASTRE_CONTACT_EMAIL = settings.CADASTRE_CONTACT_EMAIL
 
 
+def user_crige_member(user):
+    return user.crige_membership
+
+
+@user_passes_test(user_crige_member)
 @login_required(login_url=settings.LOGIN_URL)
 def upload_file(request):
 
     user = request.user
-    user, profile = user_and_profile(request)
-    if not profile.crige_membership:
-        raise Http404
 
     if request.method == 'POST':
         # crée une instance formulaire et la peuple avec des données provenant de la requête
-        form = OrderForm(request.POST, request.FILES, user=request.user)
+        form = OrderForm(request.POST, request.FILES, user=user)
 
         if form.is_valid():
             order = form.save(commit=False)
             # peuplement de l'instance applicant du modèle form (= user_id)
-            order.applicant = request.user
-            order.organisation = Organisation.objects.get(id=Profile.objects.get(user_id=request.user).organisation_id)
+            order.applicant = user
             order.save()
 
             attach_files = [
@@ -86,5 +85,5 @@ def upload_file(request):
 
     # si on reçoit un GET (ou autre méthode) un formulaire vide est renvoyé
     else:
-        form = OrderForm(user=request.user)
+        form = OrderForm(user=user)
     return render(request, 'commandes/commandes.html', {'form': form})

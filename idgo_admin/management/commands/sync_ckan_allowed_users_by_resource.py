@@ -15,17 +15,19 @@
 
 
 from django.core.management.base import BaseCommand
+from django.contrib.auth import get_user_model
 from idgo_admin.ckan_module import CkanHandler
 from idgo_admin.ckan_module import CkanUserHandler
-from idgo_admin.models import Profile
 from idgo_admin.models import Resource
 import json
+
+User = get_user_model()
 
 
 def get_all_users_for_organisations(list_id):
     return [
-        profile.user.username
-        for profile in Profile.objects.filter(
+        user.username
+        for user in User.objects.filter(
             organisation__in=list_id, organisation__is_active=True)]
 
 

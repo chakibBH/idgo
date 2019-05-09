@@ -29,7 +29,7 @@
 	<span class="glyphicon glyphicon-bell" aria-hidden="true"></span>
 	Vous êtes un utilisateur enregistré. Pour profiter des fonctionnalités participatives de DATASUD, vous pouvez parcourir <a href="{{ ckan_url }}" target="_blank">Le Catalogue</a>.
 </div>
-		{% if user.profile.is_contributor %}
+		{% if user.is_contributor %}
 <div role="alert" class="alert alert-warning">
 	<span class="glyphicon glyphicon-bullhorn" aria-hidden="true"></span>Vous n'avez aucun jeu de données. <a href="{% url 'idgo_admin:dataset_editor' id='new' %}">Créer un nouveau jeu de données</a> pour commencer.
 <div/>

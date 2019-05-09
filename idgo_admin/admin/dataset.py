@@ -15,7 +15,7 @@
 
 
 from django.contrib import admin
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.contrib import messages
 from django import forms
 from django.forms.models import BaseInlineFormSet
@@ -27,12 +27,13 @@ from django.utils.text import slugify
 from idgo_admin import logger
 from idgo_admin.models import Dataset
 from idgo_admin.models import Keywords
-from idgo_admin.models import Profile
 from idgo_admin.models import Resource
 from idgo_admin.models import ResourceFormats
 import re
 from taggit.admin import Tag
 from taggit.models import TaggedItem
+
+User = get_user_model()
 
 
 def synchronize(modeladmin, request, queryset):
@@ -113,7 +114,6 @@ class MyDataSetForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['organisation'].required = True
         self.fields['editor'].queryset = User.objects.filter(
-            profile__in=Profile.objects.all(),
             is_active=True).order_by('username')
 
 

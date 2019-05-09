@@ -68,13 +68,13 @@ def serialize(organisation):
 
 def handler_get_request(request):
     # user = request.user
-    # if user.profile.is_admin:
+    # if user.is_admin:
     #     # Un administrateur « métiers » peut tout voir.
     #     organisations = Organisation.objects.all()
     # else:
-    #     s1 = set(user.profile.referent_for)
-    #     s2 = set(user.profile.contribute_for)
-    #     s3 = set([user.profile.organisation])
+    #     s1 = set(user.referent_for)
+    #     s2 = set(user.contribute_for)
+    #     s3 = set([user.organisation])
     #     organisations = list(s1 | s2 | s3)
     organisations = Organisation.objects.all()
     return [serialize(organisation) for organisation in organisations]
@@ -125,7 +125,7 @@ def handle_pust_request(request, organisation_name=None):
                 AccountActions.objects.create(
                     action='created_organisation_through_api',
                     organisation=organisation,
-                    profile=user.profile,
+                    user=user,
                     closed=timezone.now())
     except ValidationError as e:
         return GenericException(details=e.__str__())
@@ -150,7 +150,7 @@ class OrganisationShow(APIView):
     def put(self, request, organisation_name):
         """Créer une nouvelle organisation."""
         request.PUT, request._files = parse_request(request)
-        if not request.user.profile.is_admin:
+        if not request.user.is_admin:
             raise Http404()
         try:
             handle_pust_request(request, organisation_name=organisation_name)
@@ -174,7 +174,7 @@ class OrganisationList(APIView):
 
     def post(self, request):
         """Créer une nouvelle organisation."""
-        if not request.user.profile.is_admin:
+        if not request.user.is_admin:
             raise Http404()
         try:
             handle_pust_request(request)

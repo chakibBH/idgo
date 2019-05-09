@@ -21,7 +21,9 @@ from django.core.mail import get_connection
 from django.core.mail.message import EmailMultiAlternatives
 from idgo_admin.utils import PartialFormatter
 from urllib.parse import urljoin
+from django.contrib.auth import get_user_model
 
+User = get_user_model()
 
 EXTRACTOR_URL = settings.EXTRACTOR_URL
 DEFAULT_FROM_EMAIL = settings.DEFAULT_FROM_EMAIL
@@ -60,15 +62,14 @@ def get_admins_mails(crige=False):
     kwargs = {'is_active': True, 'is_admin': True}
     if crige:
         kwargs['crige_membership'] = True
-    Model = apps.get_model(app_label='idgo_admin', model_name='Profile')
-    profiles = Model.objects.filter(**kwargs)
-    return [profile.user.email for profile in profiles]
+    users = User.objects.filter(**kwargs)
+    return [user.email for user in users]
 
 
 def get_referents_mails(organisation):
     Model = apps.get_model(app_label='idgo_admin', model_name='LiaisonsReferents')
-    l_profiles = Model.objects.filter(organisation=organisation, validated_on__isnull=False)
-    return [l_profile.profile.user.email for l_profile in l_profiles]
+    users = Model.objects.filter(organisation=organisation, validated_on__isnull=False)
+    return [user.email for user in users]
 
 
 def sender(template_name, to=None, cc=None, bcc=None, attach_files=[], **kvp):

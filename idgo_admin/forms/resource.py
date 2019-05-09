@@ -15,6 +15,7 @@
 
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db.models import BooleanField
 from django.db.models import Case
@@ -25,13 +26,14 @@ from django.forms.models import ModelChoiceIterator
 from django.utils import timezone
 from idgo_admin.forms import CustomCheckboxSelectMultiple
 from idgo_admin.models import Organisation
-from idgo_admin.models import Profile
 from idgo_admin.models import Resource
 from idgo_admin.models import ResourceFormats
 from idgo_admin.models import SupportedCrs
 from idgo_admin.utils import readable_file_size
 import os
 
+
+User = get_user_model()
 
 try:
     DOWNLOAD_SIZE_LIMIT = settings.DOWNLOAD_SIZE_LIMIT
@@ -296,7 +298,7 @@ class ResourceForm(forms.ModelForm):
     profiles_allowed = forms.ModelMultipleChoiceField(
         label="Utilisateurs autorisés",
         required=False,
-        queryset=Profile.objects.filter(is_active=True).order_by('user__last_name'),
+        queryset=User.objects.filter(is_active=True).order_by('last_name'),
         to_field_name='pk',
         widget=CustomCheckboxSelectMultiple(
             attrs={

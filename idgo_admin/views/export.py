@@ -28,16 +28,11 @@ from django.db.models import Value
 from django.db.models import When
 from django.http import Http404
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.views import View
 from idgo_admin.ckan_module import CkanHandler
-from idgo_admin.exceptions import ExceptionsHandler
-from idgo_admin.exceptions import ProfileHttp404
 from idgo_admin.models import Dataset
-from idgo_admin.models import Profile
-from idgo_admin.shortcuts import on_profile_http404
 from idgo_admin.views.dataset import get_filtered_datasets
 import unicodecsv
 from urllib.parse import urljoin
@@ -111,17 +106,10 @@ class Export(View):
     def handle(self, request, *args, **kwargs):
 
         user = request.user
-        if user.is_anonymous:
-            profile = None
-        else:
-            try:
-                profile = get_object_or_404(Profile, user=user)
-            except Exception:
-                raise ProfileHttp404
 
         params = request.POST or request.GET
 
-        if not profile:
+        if not user.is_authenticated:
             ids = params.get('ids', '').split(',')
             qs = Dataset.objects.filter(ckan_id__in=[UUID(id) for id in ids])
         else:
@@ -133,11 +121,11 @@ class Export(View):
             elif mode == all:
                 QuerySet = Dataset.default
 
-            qs = get_filtered_datasets(QuerySet, params, profile=profile)
+            qs = get_filtered_datasets(QuerySet, params)
 
         outputformat = params.get('format')
         if not outputformat or outputformat not in ('odl', 'datasud'):
-            raise Http404
+            raise Http404()
 
         if outputformat == 'odl':
             annotate = OrderedDict((
@@ -236,10 +224,8 @@ class Export(View):
 
         return response
 
-    @ExceptionsHandler(ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
     def get(self, request, *args, **kwargs):
         return self.handle(request, *args, **kwargs)
 
-    @ExceptionsHandler(ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
     def post(self, request, *args, **kwargs):
         return self.handle(request, *args, **kwargs)

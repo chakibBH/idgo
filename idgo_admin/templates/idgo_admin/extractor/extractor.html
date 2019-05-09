@@ -63,14 +63,14 @@
 						</button>
 						<ul class="dropdown-menu">
 							<li>
-								<a href="{% url 'idgo_admin:update_account' site_name='admin' %}">Mon profil</a>
+								<a href="{% url 'auth_users:update_account' %}">Mon profil</a>
 							</li>
 							<li>
-								<a href="{% url 'server_cas:signOut' %}">Me déconnecter</a>
+								<a href="{% url 'auth_users:signOut' %}">Me déconnecter</a>
 							</li>
 							<li role="separator" class="divider"></li>
 							<li>
-								<a href="{% url 'idgo_admin:extractor_dashboard' site_name='admin' %}" aria-controls="all-extracts" role="tab">Mes extractions</a>
+								<a href="{% url 'idgo_admin:extractor_dashboard' %}" aria-controls="all-extracts" role="tab">Mes extractions</a>
 							</li>
 						</ul>
 					</div>

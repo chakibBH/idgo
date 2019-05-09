@@ -15,12 +15,13 @@
 
 
 from django.conf import settings
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.http import HttpResponse
 from idgo_admin.models.mail import sender as mail_sender
 import unicodecsv
 import webbrowser
 
+User = get_user_model()
 
 try:
     CC_EMAIL = settings.CC_EMAIL

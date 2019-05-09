@@ -30,8 +30,6 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.views import View
 from idgo_admin.exceptions import CkanBaseError
-from idgo_admin.exceptions import ExceptionsHandler
-from idgo_admin.exceptions import ProfileHttp404
 from idgo_admin.forms.resource import ResourceForm as Form
 from idgo_admin.models import Dataset
 from idgo_admin.models.mail import send_resource_creation_mail
@@ -39,9 +37,7 @@ from idgo_admin.models.mail import send_resource_delete_mail
 from idgo_admin.models.mail import send_resource_update_mail
 from idgo_admin.models import Resource
 from idgo_admin.shortcuts import get_object_or_404_extended
-from idgo_admin.shortcuts import on_profile_http404
 from idgo_admin.shortcuts import render_with_info_profile
-from idgo_admin.shortcuts import user_and_profile
 from idgo_admin.views.dataset import target as datasets_target
 import json
 import os
@@ -62,8 +58,6 @@ decorators = [csrf_exempt, login_required(login_url=settings.LOGIN_URL)]
 @login_required(login_url=settings.LOGIN_URL)
 @csrf_exempt
 def resource(request, dataset_id=None, *args, **kwargs):
-    user, profile = user_and_profile(request)
-
     id = request.GET.get('id', request.GET.get('ckan_id'))
     if not id:
         raise Http404
@@ -124,10 +118,9 @@ class ResourceManager(View):
             'mode': mode,
             }
 
-    @ExceptionsHandler(actions={ProfileHttp404: on_profile_http404})
     def get(self, request, dataset_id=None, *args, **kwargs):
 
-        user, profile = user_and_profile(request)
+        user = request.user
 
         dataset = get_object_or_404_extended(
             Dataset, user, include={'id': dataset_id})
@@ -153,7 +146,6 @@ class ResourceManager(View):
 
         return render_with_info_profile(request, self.template, context)
 
-    @ExceptionsHandler(ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
     @transaction.atomic
     def post(self, request, dataset_id=None, *args, **kwargs):
 
@@ -161,7 +153,7 @@ class ResourceManager(View):
         storage = messages.get_messages(request)
         storage.used = True
 
-        user, profile = user_and_profile(request)
+        user = request.user
 
         dataset = get_object_or_404_extended(
             Dataset, user, include={'id': dataset_id})
@@ -304,10 +296,9 @@ class ResourceManager(View):
             return JsonResponse(json.dumps({'error': error}), safe=False)
         return render_with_info_profile(request, self.template, context)
 
-    @ExceptionsHandler(ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
     def delete(self, request, dataset_id=None, *args, **kwargs):
 
-        user, profile = user_and_profile(request)
+        user = request.user
 
         dataset = get_object_or_404_extended(
             Dataset, user, include={'id': dataset_id})

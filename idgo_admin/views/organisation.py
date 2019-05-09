@@ -16,6 +16,7 @@
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth import get_user_model
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db.models import Q
@@ -31,9 +32,7 @@ from django.views import View
 import functools
 from idgo_admin.exceptions import CkanBaseError
 from idgo_admin.exceptions import CswBaseError
-from idgo_admin.exceptions import ExceptionsHandler
 from idgo_admin.exceptions import GenericException
-from idgo_admin.exceptions import ProfileHttp404
 from idgo_admin.forms.organisation import OrganisationForm as Form
 from idgo_admin.forms.organisation import RemoteCkanForm
 from idgo_admin.forms.organisation import RemoteCswForm
@@ -47,119 +46,116 @@ from idgo_admin.models.mail import send_membership_confirmation_mail
 from idgo_admin.models.mail import send_organisation_creation_confirmation_mail
 from idgo_admin.models.mail import send_referent_confirmation_mail
 from idgo_admin.models import Organisation
-from idgo_admin.models import Profile
 from idgo_admin.models import RemoteCkan
 from idgo_admin.models import RemoteCsw
 from idgo_admin.models import SupportedCrs
 from idgo_admin.mra_client import MRAHandler
-from idgo_admin.shortcuts import on_profile_http404
 from idgo_admin.shortcuts import render_with_info_profile
-from idgo_admin.shortcuts import user_and_profile
 import operator
 from urllib.parse import urljoin
 
+User = get_user_model()
 
 CKAN_URL = settings.CKAN_URL
 
 decorators = [csrf_exempt, login_required(login_url=settings.LOGIN_URL)]
 
 
-def creation_process(request, profile, organisation, mail=True):
+def creation_process(request, user, organisation, mail=True):
     action = AccountActions.objects.create(
         action='confirm_new_organisation',
         organisation=organisation,
-        profile=profile)
+        user=user)
     if mail:
         url = request.build_absolute_uri(
             reverse('idgo_admin:confirm_new_orga', kwargs={'key': action.key}))
-        send_organisation_creation_confirmation_mail(profile.user, organisation, url)
+        send_organisation_creation_confirmation_mail(user, organisation, url)
     return action
 
 
-def member_subscribe_process(request, profile, organisation, mail=True):
+def member_subscribe_process(request, user, organisation, mail=True):
     action = AccountActions.objects.create(
         action='confirm_rattachement',
         organisation=organisation,
-        profile=profile)
+        user=user)
 
     if mail:
         url = request.build_absolute_uri(
             reverse('idgo_admin:confirm_rattachement', kwargs={'key': action.key}))
-        send_membership_confirmation_mail(profile.user, organisation, url)
+        send_membership_confirmation_mail(user, organisation, url)
     return action
 
 
-def member_unsubscribe_process(request, profile, organisation):
-    if profile.organisation != organisation:
+def member_unsubscribe_process(request, user, organisation):
+    if user.organisation != organisation:
         raise GenericException()
-    if profile.organisation.is_crige_partner:
-        profile.crige_membership = False
-    profile.organisation = None
-    profile.membership = False
-    profile.save()
+    if user.organisation.is_crige_partner:
+        user.crige_membership = False
+    user.organisation = None
+    user.membership = False
+    user.save()
 
 
-def contributor_subscribe_process(request, profile, organisation, mail=True):
+def contributor_subscribe_process(request, user, organisation, mail=True):
     LiaisonsContributeurs.objects.get_or_create(
-        profile=profile,
+        user=user,
         organisation=organisation)
     action = AccountActions.objects.create(
         action='confirm_contribution',
         organisation=organisation,
-        profile=profile)
+        user=user)
     if mail:
         url = request.build_absolute_uri(
             reverse('idgo_admin:confirm_contribution', kwargs={'key': action.key}))
-        send_contributor_confirmation_mail(profile.user, organisation, url)
+        send_contributor_confirmation_mail(user, organisation, url)
     return action
 
 
-def contributor_unsubscribe_process(request, profile, organisation):
+def contributor_unsubscribe_process(request, user, organisation):
     LiaisonsContributeurs.objects.get(
-        organisation=organisation, profile=profile).delete()
+        organisation=organisation, user=user).delete()
 
 
-def referent_subscribe_process(request, profile, organisation, mail=True):
+def referent_subscribe_process(request, user, organisation, mail=True):
     if not LiaisonsContributeurs.objects.filter(
-            organisation=organisation, profile=profile).exists():
-        contributor_subscribe_process(request, profile, organisation, mail=False)
+            organisation=organisation, user=user).exists():
+        contributor_subscribe_process(request, user, organisation, mail=False)
 
     LiaisonsReferents.objects.get_or_create(
-        organisation=organisation, profile=profile, validated_on=None)
+        organisation=organisation, user=user, validated_on=None)
     action = AccountActions.objects.create(
         action='confirm_referent',
-        organisation=organisation, profile=profile)
+        organisation=organisation, user=user)
 
     if mail:
         url = request.build_absolute_uri(
             reverse('idgo_admin:confirm_referent', kwargs={'key': action.key}))
-        send_referent_confirmation_mail(profile.user, organisation, url)
+        send_referent_confirmation_mail(user, organisation, url)
     return action
 
 
-def referent_unsubscribe_process(request, profile, organisation):
+def referent_unsubscribe_process(request, user, organisation):
     LiaisonsReferents.objects.get(
-        organisation=organisation, profile=profile).delete()
+        organisation=organisation, user=user).delete()
 
 
-@ExceptionsHandler(ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
 @login_required(login_url=settings.LOGIN_URL)
 @csrf_exempt
 def all_organisations(request, *args, **kwargs):
 
-    user, profile = user_and_profile(request)
+    user = request.user
 
     organisations = [{
         'contributor':
             item in Organisation.objects.filter(
-                liaisonscontributeurs__profile=profile,
+                liaisonscontributeurs__user=user,
                 liaisonscontributeurs__validated_on__isnull=False),
         'legal_name': item.legal_name,
-        'member': item == profile.organisation,
+        'member': item == user.organisation,
         'pk': item.pk,
         'referent':
-            profile.is_admin and True or item in Organisation.objects.filter(
-                liaisonsreferents__profile=profile,
+            user.is_admin and True or item in Organisation.objects.filter(
+                liaisonsreferents__user=user,
                 liaisonsreferents__validated_on__isnull=False),
         } for item in Organisation.objects.filter(is_active=True)]
 
@@ -174,12 +170,11 @@ def all_organisations(request, *args, **kwargs):
             'organisations': organisations})
 
 
-@ExceptionsHandler(ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
 @login_required(login_url=settings.LOGIN_URL)
 @csrf_exempt
 def organisation(request, id=None):
 
-    user, profile = user_and_profile(request)
+    user = request.user
 
     instance = get_object_or_404(Organisation, id=id, is_active=True)
 
@@ -201,19 +196,19 @@ def organisation(request, id=None):
         'members': [{
             'username': member.user.username,
             'full_name': member.user.get_full_name(),
-            'is_member': Profile.objects.filter(
+            'is_member': User.objects.filter(
                 organisation=id, id=member.id).exists(),
             'is_contributor': LiaisonsContributeurs.objects.filter(
-                profile=member, organisation__id=id, validated_on__isnull=False
+                user=member, organisation__id=id, validated_on__isnull=False
                 ).exists(),
             'is_referent': LiaisonsReferents.objects.filter(
-                profile=member, organisation__id=id, validated_on__isnull=False
+                user=member, organisation__id=id, validated_on__isnull=False
                 ).exists(),
             'crige_membership': member.crige_membership,
             'datasets_count': len(Dataset.objects.filter(
                 organisation=id, editor=member.user)),
             'profile_id': member.id
-            } for member in Profile.objects.filter(
+            } for member in User.objects.filter(
                 functools.reduce(operator.or_, [
                     Q(organisation=id),
                     functools.reduce(operator.and_, [
@@ -239,14 +234,13 @@ def organisation(request, id=None):
     return JsonResponse(data=data, safe=False)
 
 
-@ExceptionsHandler(ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
 @login_required(login_url=settings.LOGIN_URL)
 @csrf_exempt
 def crige_partnership(request):
     id = request.GET.get('id')
     if not id:
         raise Http404
-    user, profile = user_and_profile(request)
+    user = request.user
     organisation = get_object_or_404(Organisation, id=id, is_active=True)
     send_mail_asking_for_crige_partnership(user, organisation)
 
@@ -256,19 +250,15 @@ class CreateOrganisation(View):
 
     template = 'idgo_admin/organisation/edit.html'
 
-    @ExceptionsHandler(
-        ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
     def get(self, request):
-        user, profile = user_and_profile(request)
+        user = request.user
         context = {'form': Form(include={'user': user, 'extended': True})}
 
         return render_with_info_profile(
             request, self.template, context=context)
 
-    @ExceptionsHandler(
-        ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
     def post(self, request):
-        user, profile = user_and_profile(request)
+        user = request.user
 
         form = Form(
             request.POST, request.FILES, include={'user': user})
@@ -286,19 +276,19 @@ class CreateOrganisation(View):
             return render_with_info_profile(
                 request, self.template, context={'form': form})
 
-        creation_process(request, profile, organisation)
+        creation_process(request, user, organisation)
 
         form.cleaned_data.get('rattachement_process', False) \
-            and member_subscribe_process(request, profile, organisation)
+            and member_subscribe_process(request, user, organisation)
 
         # Dans le cas ou seul le role de contributeur est demandé
         form.cleaned_data.get('contributor_process', False) \
             and not form.cleaned_data.get('referent_process', False) \
-            and contributor_subscribe_process(request, profile, organisation)
+            and contributor_subscribe_process(request, user, organisation)
 
         # role de référent requis donc role de contributeur requis
         form.cleaned_data.get('referent_process', False) \
-            and referent_subscribe_process(request, profile, organisation)
+            and referent_subscribe_process(request, user, organisation)
 
         messages.success(request, 'La demande a bien été envoyée.')
 
@@ -309,17 +299,14 @@ class CreateOrganisation(View):
 class UpdateOrganisation(View):
     template = 'idgo_admin/organisation/edit.html'
 
-    @ExceptionsHandler(
-        ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
     def get(self, request, id=None):
-        user, profile = user_and_profile(request)
+        user = request.user
 
-        is_admin = profile.is_admin
         is_referent = LiaisonsReferents.objects.filter(
-            profile=profile, organisation__id=id,
+            user=user, organisation__id=id,
             validated_on__isnull=False) and True or False
 
-        if is_referent or is_admin:
+        if is_referent or user.is_admin:
             instance = get_object_or_404(Organisation, id=id)
             return render_with_info_profile(
                 request, self.template, context={
@@ -330,10 +317,8 @@ class UpdateOrganisation(View):
                                  include={'user': user, 'id': id})})
         raise Http404()
 
-    @ExceptionsHandler(
-        ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
     def post(self, request, id=None):
-        user, profile = user_and_profile(request)
+        user = request.user
 
         instance = get_object_or_404(Organisation, id=id)
         form = Form(request.POST, request.FILES,
@@ -373,19 +358,16 @@ class UpdateOrganisation(View):
 @method_decorator(decorators, name='dispatch')
 class OrganisationOWS(View):
 
-    @ExceptionsHandler(
-        ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
     def post(self, request):
-        user, profile = user_and_profile(request)
+        user = request.user
 
         instance = get_object_or_404(Organisation, id=request.GET.get('id'))
 
-        is_admin = profile.is_admin
         is_referent = LiaisonsReferents.objects.filter(
-            profile=profile, organisation=instance,
+            user=user, organisation=instance,
             validated_on__isnull=False) and True or False
 
-        if is_referent or is_admin:
+        if is_referent or user.is_admin:
             json = {
                 'abstract': request.POST.get('abstract', None),
                 'srs': [crs.authority for crs in SupportedCrs.objects.all()],
@@ -405,11 +387,9 @@ class Subscription(View):
 
     namespace = 'idgo_admin:all_organisations'
 
-    @ExceptionsHandler(
-        ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
     def get(self, request, status=None, subscription=None):
 
-        user, profile = user_and_profile(request)
+        user = request.user
 
         organisation = get_object_or_404(Organisation, id=request.GET.get('id'))
 
@@ -430,7 +410,7 @@ class Subscription(View):
             'referent': 'référent'}
 
         try:
-            actions[status][subscription](request, profile, organisation)
+            actions[status][subscription](request, user, organisation)
         except Exception as e:
             messages.error(request, str(e))
         else:
@@ -471,14 +451,13 @@ class RemoteCkanEditor(View):
 
     def get(self, request, id, *args, **kwargs):
 
-        user, profile = user_and_profile(request)
+        user = request.user
 
-        is_admin = profile.is_admin
         is_referent = LiaisonsReferents.objects.filter(
-            profile=profile, organisation__id=id,
+            user=user, organisation__id=id,
             validated_on__isnull=False) and True or False
 
-        if is_referent or is_admin:
+        if is_referent or user.is_admin:
             organisation = get_object_or_404(Organisation, id=id)
 
             context = {'organisation': organisation}
@@ -501,14 +480,13 @@ class RemoteCkanEditor(View):
 
     def post(self, request, id, *args, **kwargs):
 
-        user, profile = user_and_profile(request)
+        user = request.user
 
-        is_admin = profile.is_admin
         is_referent = LiaisonsReferents.objects.filter(
-            profile=profile, organisation__id=id,
+            user=user, organisation__id=id,
             validated_on__isnull=False) and True or False
 
-        if not(is_referent or is_admin):
+        if not(is_referent or user.is_admin):
             raise Http404()
 
         organisation = get_object_or_404(Organisation, id=id)
@@ -574,14 +552,13 @@ class DeleteRemoteCkanLinked(View):
 
     def post(self, request, id, *args, **kwargs):
 
-        user, profile = user_and_profile(request)
+        user = request.user
 
-        is_admin = profile.is_admin
         is_referent = LiaisonsReferents.objects.filter(
-            profile=profile, organisation__id=id,
+            user=user, organisation__id=id,
             validated_on__isnull=False) and True or False
 
-        if not(is_referent or is_admin):
+        if not(is_referent or user.is_admin):
             raise Http404()
 
         organisation = get_object_or_404(Organisation, id=id)
@@ -616,14 +593,13 @@ class RemoteCswEditor(View):
 
     def get(self, request, id, *args, **kwargs):
 
-        user, profile = user_and_profile(request)
+        user = request.user
 
-        is_admin = profile.is_admin
         is_referent = LiaisonsReferents.objects.filter(
-            profile=profile, organisation__id=id,
+            user=user, organisation__id=id,
             validated_on__isnull=False) and True or False
 
-        if is_referent or is_admin:
+        if is_referent or user.is_admin:
             organisation = get_object_or_404(Organisation, id=id)
 
             context = {'organisation': organisation}
@@ -646,14 +622,13 @@ class RemoteCswEditor(View):
 
     def post(self, request, id, *args, **kwargs):
 
-        user, profile = user_and_profile(request)
+        user = request.user
 
-        is_admin = profile.is_admin
         is_referent = LiaisonsReferents.objects.filter(
-            profile=profile, organisation__id=id,
+            user=user, organisation__id=id,
             validated_on__isnull=False) and True or False
 
-        if not(is_referent or is_admin):
+        if not(is_referent or user.is_admin):
             raise Http404()
 
         organisation = get_object_or_404(Organisation, id=id)
@@ -719,14 +694,13 @@ class DeleteRemoteCswLinked(View):
 
     def post(self, request, id, *args, **kwargs):
 
-        user, profile = user_and_profile(request)
+        user = request.user
 
-        is_admin = profile.is_admin
         is_referent = LiaisonsReferents.objects.filter(
-            profile=profile, organisation__id=id,
+            user=user, organisation__id=id,
             validated_on__isnull=False) and True or False
 
-        if not(is_referent or is_admin):
+        if not(is_referent or user.is_admin):
             raise Http404()
 
         organisation = get_object_or_404(Organisation, id=id)

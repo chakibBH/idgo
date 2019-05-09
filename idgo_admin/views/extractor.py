@@ -28,8 +28,6 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views import View
 from idgo_admin.ckan_module import CkanHandler
 from idgo_admin.datagis import intersect
-from idgo_admin.exceptions import ExceptionsHandler
-from idgo_admin.exceptions import ProfileHttp404
 from idgo_admin.models import AsyncExtractorTask
 from idgo_admin.models import BaseMaps
 from idgo_admin.models import Commune
@@ -39,9 +37,7 @@ from idgo_admin.models import Layer
 from idgo_admin.models import Organisation
 from idgo_admin.models import Resource
 from idgo_admin.models import SupportedCrs
-from idgo_admin.shortcuts import on_profile_http404
 from idgo_admin.shortcuts import render_with_info_profile
-from idgo_admin.shortcuts import user_and_profile
 import json
 from math import ceil
 import re
@@ -58,11 +54,9 @@ except AttributeError:
 decorators = [csrf_exempt, login_required(login_url=settings.LOGIN_URL)]
 
 
-@ExceptionsHandler(ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
 @login_required(login_url=settings.LOGIN_URL)
 @csrf_exempt
 def extractor_task(request, *args, **kwargs):
-    user, profile = user_and_profile(request)
     instance = get_object_or_404(AsyncExtractorTask, uuid=request.GET.get('id'))
     query = instance.query or instance.details.get['query']
 
@@ -123,9 +117,9 @@ class ExtractorDashboard(View):
 
     def get(self, request, *args, **kwargs):
 
-        user, profile = user_and_profile(request)
-        if not profile.crige_membership:
-            raise Http404
+        user = request.user
+        if not user.crige_membership:
+            raise Http404()
 
         order_by = request.GET.get('sortby', '-submission')
 
@@ -146,7 +140,7 @@ class ExtractorDashboard(View):
         x = items_per_page * page_number - items_per_page
         y = x + items_per_page
 
-        if profile.is_admin and profile.crige_membership:
+        if user.is_admin and user.crige_membership:
             tasks = AsyncExtractorTask.objects.all()
         else:
             tasks = AsyncExtractorTask.objects.filter(user=user)
@@ -167,12 +161,11 @@ class ExtractorDashboard(View):
         return render_with_info_profile(
             request, 'idgo_admin/extractor/dashboard.html', context=context)
 
-    @ExceptionsHandler(ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
     def post(self, request, *args, **kwargs):
 
-        user, profile = user_and_profile(request)
-        if not profile.crige_membership:
-            raise Http404
+        user = request.user
+        if not user.crige_membership:
+            raise Http404()
 
         if 'revoke' in request.POST:
             task = get_object_or_404(
@@ -359,8 +352,8 @@ class Extractor(View):
 
         if bool(request.GET.get('jurisdiction')):
             context['jurisdiction'] = True
-            if user.profile.organisation and user.profile.organisation.jurisdiction:
-                context['footprint'] = json.loads(user.profile.organisation.jurisdiction.geom.geojson)
+            if user.organisation and user.organisation.jurisdiction:
+                context['footprint'] = json.loads(user.organisation.jurisdiction.geom.geojson)
             else:
                 context['footprint'] = None
         else:
@@ -375,21 +368,19 @@ class Extractor(View):
 
         return context
 
-    @ExceptionsHandler(ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
     def get(self, request, *args, **kwargs):
-        user, profile = user_and_profile(request)
-        if not profile.crige_membership:
-            raise Http404
+        user = request.user
+        if not user.crige_membership:
+            raise Http404()
 
         return render_with_info_profile(
             request, self.template,
             context=self.get_context(request, user))
 
-    @ExceptionsHandler(ignore=[Http404], actions={ProfileHttp404: on_profile_http404})
     def post(self, request, *args, **kwargs):
-        user, profile = user_and_profile(request)
-        if not profile.crige_membership:
-            raise Http404
+        user = request.user
+        if not user.crige_membership:
+            raise Http404()
 
         context = self.get_context(request, user)
         footprint = request.POST.get('footprint') or None
@@ -441,7 +432,7 @@ class Extractor(View):
 
             if resource.geo_restriction:
                 footprint_restriction = \
-                    json.loads(user.profile.organisation.jurisdiction.geom.geojson)
+                    json.loads(user.organisation.jurisdiction.geom.geojson)
                 if footprint:
                     try:
                         data_extraction['footprint'] = intersect(json.dumps(footprint), json.dumps(footprint_restriction))
@@ -480,7 +471,7 @@ class Extractor(View):
 
                     if resource.geo_restriction:
                         footprint_restriction = \
-                            json.loads(user.profile.organisation.jurisdiction.geom.geojson)
+                            json.loads(user.organisation.jurisdiction.geom.geojson)
                         if footprint:
                             data_extraction['footprint'] = intersect(json.dumps(footprint), json.dumps(footprint_restriction))
                         else:
@@ -504,8 +495,8 @@ class Extractor(View):
             'user_email_address': user.email,
             'user_name': user.last_name,
             'user_first_name': user.first_name,
-            'user_company': user.profile.organisation and user.profile.organisation.legal_name or '',
-            'user_address': user.profile.organisation and user.profile.organisation.full_address or '',
+            'user_company': user.organisation and user.organisation.legal_name or '',
+            'user_address': user.organisation and user.organisation.full_address or '',
             'data_extractions': data_extractions,
             'additional_files': additional_files}
 

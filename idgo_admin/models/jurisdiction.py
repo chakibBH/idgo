@@ -15,6 +15,7 @@
 
 
 from django.apps import apps
+from django.conf import settings
 from django.contrib.gis.db import models
 from django.contrib.gis.db.models import Union
 from django.contrib.gis.geos import MultiPolygon
@@ -152,7 +153,7 @@ class JurisdictionCommune(models.Model):
         )
 
     created_by = models.ForeignKey(
-        to='Profile',
+        to=settings.AUTH_USER_MODEL,
         related_name='creates_jurisdiction',
         verbose_name="Créé par",
         null=True,

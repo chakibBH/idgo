@@ -43,6 +43,7 @@ try:
         ISO_TOPIC_CHOICES = ((m['id'], m['value']) for m in iso_topics)
 except Exception:
     ISO_TOPIC_CHOICES = None
+    MDEDIT_LOCALES = None
 
 
 class Category(models.Model):

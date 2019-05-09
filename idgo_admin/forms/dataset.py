@@ -293,7 +293,7 @@ class DatasetForm(forms.ModelForm):
             and instance.editor or self.include_args.get('user')
 
         self.fields['organisation'].queryset = Organisation.objects.filter(
-            liaisonscontributeurs__profile=owner.profile,
+            liaisonscontributeurs__user=owner,
             liaisonscontributeurs__validated_on__isnull=False)
 
         self.fields['owner_name'].initial = owner.get_full_name()

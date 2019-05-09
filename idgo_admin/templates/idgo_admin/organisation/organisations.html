@@ -90,7 +90,7 @@
 						<ul id="table-members-paginator" class="pagination pagination-sm"></ul>
 					</nav>
 					<div class="buttons-on-the-right-side">
-						{% if user.profile.is_crige_admin %}
+						{% if user.is_crige_admin %}
 						<!-- <button role="button" name="send-mail-to-crige-member" class="btn btn-default">Envoyer un e-mail aux membres CRIGE</button> -->
 						{% endif %}
 						<button role="button" name="ckan-card" class="btn btn-default">Ouvrir la fiche Ckan</button>
@@ -136,7 +136,7 @@
 						</div>
 					</div>
 					<div class="buttons-on-the-right-side">
-						{% if user.profile.crige_membership %}
+						{% if user.crige_membership %}
 						<!-- <button type="button" name="ows-meta" class="btn btn-default">Éditer la fiche de métadonnées de service INSPIRE</button> -->
 						{% endif %}
 						<button type="button" name="ows-save" class="btn btn-primary">Enregistrer</button>
@@ -229,7 +229,7 @@ $(function() {
 				closeAllModalDialog();
 				$.ajax({
 					type: 'DELETE',
-					url: '{% url "idgo_admin:all_members" %}?organisation=' + organisationId + '&username=' + username + '&target=' + target
+					url: '{% url "auth_users:all_members" %}?organisation=' + organisationId + '&username=' + username + '&target=' + target
 				})
 				.done(function(response, textStatus, jqXHR) {
 					location.reload();
@@ -440,7 +440,7 @@ $(function() {
 				grid.setCellRenderer('is_member', new CellRenderer({render: booleanRender}));
 				grid.setCellRenderer('is_contributor', new CellRenderer({render: booleanRender}));
 				grid.setCellRenderer('is_referent', new CellRenderer({render: booleanRender}));
-				{% if user.profile.is_crige_admin %}
+				{% if user.is_crige_admin %}
 				grid.setCellRenderer('is_crige_member', new CellRenderer({render: booleanRender}));
 				{% endif %}
 			};
@@ -473,7 +473,7 @@ $(function() {
 						editable: false,
 						datatype: 'boolean'
 					}, {
-					{% if user.profile.is_crige_admin %}
+					{% if user.is_crige_admin %}
 						name: 'is_crige_member',
 						label: 'CRIGE',
 						editable: false,
@@ -502,7 +502,7 @@ $(function() {
 								data[i].is_member,
 								data[i].is_contributor,
 								data[i].is_referent,
-								{% if user.profile.is_crige_admin %}data[i].crige_membership,{% endif %}
+								{% if user.is_crige_admin %}data[i].crige_membership,{% endif %}
 								data[i].datasets_count,
 								data[i].profile_id
 							]

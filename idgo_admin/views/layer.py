@@ -30,7 +30,6 @@ from idgo_admin.forms.layer import LayerForm as Form
 from idgo_admin.models import Layer
 from idgo_admin.mra_client import MRAHandler
 from idgo_admin.shortcuts import render_with_info_profile
-from idgo_admin.shortcuts import user_and_profile
 from idgo_admin.views.dataset import target as datasets_target
 import json
 
@@ -43,7 +42,7 @@ class LayerView(View):
 
     def get(self, request, dataset_id=None, resource_id=None, layer_id=None, *args, **kwargs):
 
-        user, profile = user_and_profile(request)
+        user = request.user
 
         layer = get_object_or_404(Layer, resource=resource_id)
         form = Form(instance=layer, include={'user': user})
@@ -59,7 +58,7 @@ class LayerView(View):
 
     def post(self, request, dataset_id=None, resource_id=None, layer_id=None, *args, **kwargs):
 
-        user, profile = user_and_profile(request)
+        user = request.user
 
         layer = get_object_or_404(Layer, resource=resource_id)
         form = Form(request.POST, instance=layer, include={'user': user})
@@ -100,7 +99,7 @@ class LayerView(View):
 @login_required(login_url=settings.LOGIN_URL)
 @csrf_exempt
 def layer_styles(request, dataset_id=None, resource_id=None, layer_id=None, *args, **kwargs):
-    user, profile = user_and_profile(request)
+    user = request.user
     layer = get_object_or_404(Layer, resource=resource_id)
     target = datasets_target(layer.resource.dataset, user)
     context = {
@@ -114,10 +113,10 @@ def layer_styles(request, dataset_id=None, resource_id=None, layer_id=None, *arg
 @login_required(login_url=settings.LOGIN_URL)
 @csrf_exempt
 def layer_style(request, dataset_id=None, resource_id=None, layer_id=None, *args, **kwargs):
-    user, profile = user_and_profile(request)
+
     style_id = request.GET.get('id', None)
-    if not id:
-        raise Http404
+    if not style_id:
+        raise Http404()
     get_object_or_404(Layer, resource=resource_id)
     kwargs = {
         'dataset_id': dataset_id,
@@ -132,7 +131,7 @@ def layer_style(request, dataset_id=None, resource_id=None, layer_id=None, *args
 class LayerStyleEditorView(View):
 
     def get(self, request, dataset_id=None, resource_id=None, layer_id=None, style_id=None, *args, **kwargs):
-        user, profile = user_and_profile(request)
+        user = request.user
         layer = get_object_or_404(Layer, resource=resource_id)
         target = datasets_target(layer.resource.dataset, user)
         context = {
@@ -145,8 +144,6 @@ class LayerStyleEditorView(View):
             request, 'idgo_admin/dataset/resource/layer/style/edit.html', context=context)
 
     def post(self, request, dataset_id=None, resource_id=None, layer_id=None, style_id=None, *args, **kwargs):
-
-        user, profile = user_and_profile(request)
 
         sld = request.POST.get('sldBody')
 

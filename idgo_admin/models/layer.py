@@ -13,7 +13,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-
+from django.contrib.auth import get_user_model
 from django.apps import apps
 from django.conf import settings
 from django.contrib.gis.db import models
@@ -33,6 +33,7 @@ import json
 import os
 import re
 
+User = get_user_model()
 
 MRA = settings.MRA
 OWS_URL_PATTERN = settings.OWS_URL_PATTERN
@@ -41,10 +42,9 @@ MAPSERV_STORAGE_PATH = settings.MAPSERV_STORAGE_PATH
 
 
 def get_all_users_for_organisations(list_id):
-    Profile = apps.get_model(app_label='idgo_admin', model_name='Profile')
     return [
-        profile.user.username
-        for profile in Profile.objects.filter(
+        user.username
+        for user in User.objects.filter(
             organisation__in=list_id, organisation__is_active=True)]
 
 
