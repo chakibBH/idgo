@@ -85,7 +85,7 @@ class PasswordManager(View):
             try:
                 uuid.UUID(key)
             except Exception:
-                raise Http404
+                raise Http404()
 
             if process == 'initiate':
                 template = 'idgo_admin/initiatepassword.html'
@@ -156,7 +156,7 @@ class PasswordManager(View):
         try:
             uuid.UUID(key)
         except Exception:
-            raise Http404
+            raise Http404()
 
         if not form.is_valid():
             return render(request, template,

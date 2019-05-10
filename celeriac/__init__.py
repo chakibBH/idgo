@@ -14,13 +14,8 @@
 # under the License.
 
 
-from auth_users.models.account import User
-from auth_users.models.gdpr import Gdpr
-from auth_users.models.gdpr import GdprUser
+from __future__ import absolute_import
+from celeriac.apps import app as celery_app
 
 
-__all__ = [
-    'Gdpr',
-    'GdprUser',
-    'User',
-]
+__all__ = ('celery_app',)

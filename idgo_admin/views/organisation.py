@@ -30,6 +30,8 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.views import View
 import functools
+from idgo_admin.ckan_module import CkanBaseHandler
+# from idgo_admin.csw_module import CswBaseHandler
 from idgo_admin.exceptions import CkanBaseError
 from idgo_admin.exceptions import CswBaseError
 from idgo_admin.exceptions import GenericException
@@ -45,6 +47,10 @@ from idgo_admin.models.mail import send_mail_asking_for_crige_partnership
 from idgo_admin.models.mail import send_membership_confirmation_mail
 from idgo_admin.models.mail import send_organisation_creation_confirmation_mail
 from idgo_admin.models.mail import send_referent_confirmation_mail
+from idgo_admin.models import Category
+from idgo_admin.models import License
+from idgo_admin.models import MappingCategory
+from idgo_admin.models import MappingLicence
 from idgo_admin.models import Organisation
 from idgo_admin.models import RemoteCkan
 from idgo_admin.models import RemoteCsw
@@ -239,7 +245,7 @@ def organisation(request, id=None):
 def crige_partnership(request):
     id = request.GET.get('id')
     if not id:
-        raise Http404
+        raise Http404()
     user = request.user
     organisation = get_object_or_404(Organisation, id=id, is_active=True)
     send_mail_asking_for_crige_partnership(user, organisation)
@@ -510,17 +516,10 @@ class RemoteCkanEditor(View):
             context['instance'] = instance
             form = RemoteCkanForm(request.POST, instance=instance)
 
-        context['form'] = form
-
-        if not form.is_valid():
-            return render_with_info_profile(
-                request, self.template, context=context)
-
-        for k, v in form.cleaned_data.items():
-            setattr(instance, k, v)
         try:
             with transaction.atomic():
-                instance.save()
+                self.map_categories(instance, request.POST, form)
+                self.map_licences(instance, request.POST, form)
         except ValidationError as e:
             error = True
             messages.error(request, e.__str__())
@@ -528,23 +527,68 @@ class RemoteCkanEditor(View):
             error = True
             form.add_error('__all__', e.__str__())
             messages.error(request, e.__str__())
+
         else:
-            error = False
-            context['datasets'] = \
-                Dataset.harvested_ckan.filter(organisation=organisation)
-            context['form'] = RemoteCkanForm(instance=instance)
-            if created:
-                msg = "Veuillez indiquez les organisations distantes à moissonner."
+
+            # Une fois le mapping effectué, on sauvegarde l'instance
+
+            context['form'] = form
+
+            if not form.is_valid():
+                return render_with_info_profile(
+                    request, self.template, context=context)
+
+            for k, v in form.cleaned_data.items():
+                setattr(instance, k, v)
+            try:
+                with transaction.atomic():
+                    instance.save()
+            except ValidationError as e:
+                error = True
+                messages.error(request, e.__str__())
+            except CkanBaseError as e:
+                error = True
+                form.add_error('__all__', e.__str__())
+                messages.error(request, e.__str__())
             else:
-                msg = 'Les informations de moissonnage ont été mises à jour.'
-            messages.success(request, msg)
+                error = False
+                context['datasets'] = \
+                    Dataset.harvested_ckan.filter(organisation=organisation)
+                context['form'] = RemoteCkanForm(instance=instance)
+                if created:
+                    msg = "Veuillez indiquez les organisations distantes à moissonner."
+                else:
+                    msg = 'Les informations de moissonnage ont été mises à jour.'
+                messages.success(request, msg)
 
         if 'continue' in request.POST or error:
-            return render_with_info_profile(
-                request, self.template, context=context)
+            return HttpResponseRedirect(
+                reverse('idgo_admin:edit_remote_ckan_link', kwargs={'id': organisation.id}))
 
         return HttpResponseRedirect(
             reverse('idgo_admin:update_organisation', kwargs={'id': organisation.id}))
+
+    def map_categories(self, instance, mapper, form):
+        MappingCategory.objects.filter(remote_ckan=instance).delete()
+
+        data = list(filter(
+            lambda k: k in [el.name for el in form.get_category_fields()],
+            mapper.dict().keys()))
+        not_empty = {k: mapper.dict()[k] for k in data if mapper.dict()[k]}
+        for k, v in not_empty.items():
+            MappingCategory.objects.create(
+                remote_ckan=instance, category=Category.objects.get(id=v), slug=k[4:])
+
+    def map_licences(self, instance, mapper, form):
+        MappingLicence.objects.filter(remote_ckan=instance).delete()
+
+        data = list(filter(
+            lambda k: k in [el.name for el in form.get_licence_fields()],
+            mapper.dict().keys()))
+        not_empty = {k: mapper.dict()[k] for k in data if mapper.dict()[k]}
+        for k, v in not_empty.items():
+            MappingLicence.objects.create(
+                remote_ckan=instance, licence=License.objects.get(slug=v), slug=k[4:])
 
 
 @method_decorator(decorators, name='dispatch')
@@ -655,8 +699,9 @@ class RemoteCswEditor(View):
         context['form'] = form
 
         if not form.is_valid():
-            return render_with_info_profile(
-                request, self.template, context=context)
+            messages.error(request, form._errors.__str__())
+            return HttpResponseRedirect(
+                reverse('idgo_admin:edit_remote_csw_link', kwargs={'id': organisation.id}))
 
         for k, v in form.cleaned_data.items():
             setattr(instance, k, v)

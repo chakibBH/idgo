@@ -17,6 +17,7 @@
 from idgo_admin.models.account import AccountActions
 from idgo_admin.models.account import LiaisonsContributeurs
 from idgo_admin.models.account import LiaisonsReferents
+from idgo_admin.models.account import Role
 from idgo_admin.models.base_maps import BaseMaps
 from idgo_admin.models.category import Category
 from idgo_admin.models.data_type import DataType
@@ -37,6 +38,8 @@ from idgo_admin.models.organisation import RemoteCkan
 from idgo_admin.models.organisation import RemoteCkanDataset
 from idgo_admin.models.organisation import RemoteCsw
 from idgo_admin.models.organisation import RemoteCswDataset
+from idgo_admin.models.organisation import MappingLicence
+from idgo_admin.models.organisation import MappingCategory
 from idgo_admin.models.resource import Resource
 from idgo_admin.models.resource import ResourceFormats
 from idgo_admin.models.support import Support

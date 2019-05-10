@@ -32,7 +32,7 @@ from django.utils.html import format_html
 # filtre des commandes par année
 class YearListFilter(admin.SimpleListFilter):
 
-    title = ('année de la demande')
+    title = ("année de la demande",)
     parameter_name = 'year'
 
     def lookups(self, _request, _model_admin):
@@ -51,15 +51,15 @@ class YearListFilter(admin.SimpleListFilter):
 
 class OrderAdmin(admin.ModelAdmin):
 
-    list_display = ('date', 'user_full_name', 'email', 'orga', 'terr', 'status')
+    list_display = ('user_full_name', 'orga', 'email', 'date', 'terr', 'status',)
     raw_id_fields = ('applicant',)
     readonly_fields = ('orga',)
-    list_filter = (YearListFilter, 'status')
+    list_filter = (YearListFilter, 'status',)
 
     # ajout de l'email de l'utilisateur
     def email(self, obj):
         return format_html('<a href=\"mailto:{0}\">{0}</a>'.format(obj.applicant.email))
-    email.short_description = 'E-mail'
+    email.short_description = "E-mail"
 
     # ajout du nom du territoire de compétences
 
@@ -72,12 +72,13 @@ class OrderAdmin(admin.ModelAdmin):
         if obj:
             return obj.applicant.organisation
     orga.short_description = 'Organisation'
+    orga.admin_order_field = 'applicant__profile__organisation'
 
     def user_full_name(self, obj):
         if obj:
             return obj.applicant.first_name + ' ' + obj.applicant.last_name
     user_full_name.short_description = 'Demandeur'
-
+    user_full_name.admin_order_field = 'applicant__last_name'
     # action d'export en csv
     actions = [
         export_as_csv_action("Export CSV"),
@@ -85,8 +86,9 @@ class OrderAdmin(admin.ModelAdmin):
         email_cadastre_habilitation]
 
     export_as_csv_action.short_description = "Exporter en CSV"
-    email_cadastre_wrong_files.short_description = "Email documents invalides"
-    email_cadastre_habilitation.short_description = "Email pas d'habilitation"
+    email_cadastre_wrong_files.short_description = "E-mail documents invalides"
+    email_cadastre_habilitation.short_description = "E-mail pas d'habilitation"
+    ordering = ('applicant__profile__organisation', 'applicant__last_name',)
 
 
 admin.site.register(Order, OrderAdmin)

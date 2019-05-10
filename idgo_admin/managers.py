@@ -18,6 +18,7 @@ from django.apps import apps
 from django.contrib.gis.db import models
 from django.utils import timezone
 from idgo_admin.utils import clean_my_obj
+from itertools import chain
 
 
 # =========================================================
@@ -34,23 +35,16 @@ class DefaultDatasetManager(models.Manager):
         obj.save(force_insert=True, using=self.db, **save_opts)
         return obj
 
-    def filter(self, **kwargs):
+    def get_queryset(self, **kwargs):
         RemoteCkanDataset = apps.get_model(app_label='idgo_admin', model_name='RemoteCkanDataset')
         RemoteCswDataset = apps.get_model(app_label='idgo_admin', model_name='RemoteCswDataset')
+        this = RemoteCkanDataset.objects.all().values_list('dataset__pk', flat=True)
+        that = RemoteCswDataset.objects.all().values_list('dataset__pk', flat=True)
 
-        return super() \
-            .filter(**kwargs) \
-            .exclude(pk__in=[m.dataset.pk for m in RemoteCkanDataset.objects.all()]) \
-            .exclude(pk__in=[m.dataset.pk for m in RemoteCswDataset.objects.all()])
+        return super().get_queryset(**kwargs).exclude(pk__in=list(chain(this, that)))
 
     def all(self):
-        RemoteCkanDataset = apps.get_model(app_label='idgo_admin', model_name='RemoteCkanDataset')
-        RemoteCswDataset = apps.get_model(app_label='idgo_admin', model_name='RemoteCswDataset')
-
-        return super() \
-            .all() \
-            .exclude(pk__in=[m.dataset.pk for m in RemoteCkanDataset.objects.all()]) \
-            .exclude(pk__in=[m.dataset.pk for m in RemoteCswDataset.objects.all()])
+        return self.get_queryset()
 
     def get(self, **kwargs):
         return super().get(**kwargs)
@@ -75,7 +69,8 @@ class HarvestedCkanDatasetManager(models.Manager):
             dataset=dataset,
             remote_instance=remote_instance,
             remote_dataset=remote_dataset,
-            remote_organisation=remote_organisation)
+            remote_organisation=remote_organisation,
+            )
 
         # Enfin on met à jour le jeu de données et on le synchronize avec CKAN
         DataType = apps.get_model(app_label='idgo_admin', model_name='DataType')
@@ -147,7 +142,6 @@ class HarvestedCswDatasetManager(models.Manager):
     def create(self, **kwargs):
         remote_instance = kwargs.pop('remote_instance', None)
         remote_dataset = kwargs.pop('remote_dataset', None)
-        remote_organisation = kwargs.pop('remote_organisation', None)
 
         # Dans un premier temps on crée le jeu de données sans le synchroniser à CSW
         Dataset = apps.get_model(app_label='idgo_admin', model_name='Dataset')
@@ -161,7 +155,7 @@ class HarvestedCswDatasetManager(models.Manager):
             dataset=dataset,
             remote_instance=remote_instance,
             remote_dataset=remote_dataset,
-            remote_organisation=remote_organisation)
+            )
 
         # Enfin on met à jour le jeu de données et on le synchronize avec CSW
         DataType = apps.get_model(app_label='idgo_admin', model_name='DataType')
@@ -173,14 +167,11 @@ class HarvestedCswDatasetManager(models.Manager):
     def filter(self, **kwargs):
         remote_instance = kwargs.pop('remote_instance', None)
         remote_dataset = kwargs.pop('remote_dataset', None)
-        remote_organisation = kwargs.pop('remote_organisation', None)
-        remote_organisation__in = kwargs.pop('remote_organisation__in', None)
 
         kvp = clean_my_obj({
             'remote_instance': remote_instance,
             'remote_dataset': remote_dataset,
-            'remote_organisation': remote_organisation,
-            'remote_organisation__in': remote_organisation__in})
+            })
         if kvp:
             Dataset = apps.get_model(app_label='idgo_admin', model_name='Dataset')
             RemoteDataset = apps.get_model(app_label='idgo_admin', model_name='RemoteCswDataset')
@@ -218,7 +209,7 @@ class HarvestedCswDatasetManager(models.Manager):
             created = False
             harvested = RemoteDataset.objects.get(dataset=dataset)
             harvested.updated_on = timezone.now()
-            harvested.remote_organisation = kwargs.pop('remote_organisation', None)
+            # harvested.remote_organisation = kwargs.pop('remote_organisation', None)
             harvested.save()
 
             for k, v in kwargs.items():

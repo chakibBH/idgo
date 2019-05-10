@@ -23,6 +23,7 @@ from django.db.models.signals import post_delete
 from django.db.models.signals import post_save
 from django.db.models.signals import pre_save
 from django.dispatch import receiver
+from django.urls import reverse
 from django.utils.text import slugify
 from django.utils import timezone
 from idgo_admin.ckan_module import CkanHandler
@@ -298,6 +299,11 @@ class Dataset(models.Model):
         return urljoin(CKAN_URL, 'dataset/', self.slug)
 
     @property
+    def api_location(self):
+        kwargs = {'dataset_name': self.slug}
+        return reverse('api:dataset_show', kwargs=kwargs)
+
+    @property
     def geonet_url(self):
         if self.geonet_id:
             return urljoin(GEONETWORK_URL, 'srv/fre/catalog.search#/metadata/', self.geonet_id)
@@ -562,8 +568,9 @@ class Dataset(models.Model):
         return Model.objects.filter(dataset=self, **kwargs)
 
     def get_layers(self):
-        Model = apps.get_model(app_label='idgo_admin', model_name='Layer')
-        return Model.objects.filter(resource__dataset__pk=self.pk)
+        if self.pk:
+            Model = apps.get_model(app_label='idgo_admin', model_name='Layer')
+            return Model.objects.filter(resource__dataset__pk=self.pk)
 
     def is_contributor(self, user):
         Model = apps.get_model(app_label='idgo_admin', model_name='LiaisonsContributeurs')

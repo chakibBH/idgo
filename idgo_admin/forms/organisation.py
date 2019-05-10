@@ -19,23 +19,28 @@ from idgo_admin.ckan_module import CkanBaseHandler
 from idgo_admin.csw_module import CswBaseHandler
 from idgo_admin.exceptions import CkanBaseError
 from idgo_admin.exceptions import CswBaseError
-from idgo_admin.forms import AddressField
-from idgo_admin.forms import CityField
-from idgo_admin.forms import ContributorField
-from idgo_admin.forms import CustomCheckboxSelectMultiple
-from idgo_admin.forms import DescriptionField
-from idgo_admin.forms import EMailField
-from idgo_admin.forms import JurisdictionField
-from idgo_admin.forms import LicenseField
-from idgo_admin.forms import MemberField
-from idgo_admin.forms import OrganisatioLegalNameField
-from idgo_admin.forms import OrganisationLogoField
-from idgo_admin.forms import OrganisationTypeField
-from idgo_admin.forms import PhoneField
-from idgo_admin.forms import PostcodeField
-from idgo_admin.forms import ReferentField
-from idgo_admin.forms import WebsiteField
+from idgo_admin.forms.fields import AddressField
+from idgo_admin.forms.fields import CityField
+from idgo_admin.forms.fields import ContributorField
+from idgo_admin.forms.fields import CustomCheckboxSelectMultiple
+from idgo_admin.forms.fields import DescriptionField
+from idgo_admin.forms.fields import EMailField
+from idgo_admin.forms.fields import JurisdictionField
+from idgo_admin.forms.fields import LicenseField
+from idgo_admin.forms.fields import MemberField
+from idgo_admin.forms.fields import OrganisatioLegalNameField
+from idgo_admin.forms.fields import OrganisationLogoField
+from idgo_admin.forms.fields import OrganisationTypeField
+from idgo_admin.forms.fields import PhoneField
+from idgo_admin.forms.fields import PostcodeField
+from idgo_admin.forms.fields import ReferentField
+from idgo_admin.forms.fields import WebsiteField
+from idgo_admin import logger
+from idgo_admin.models import Category
 from idgo_admin.models import Jurisdiction
+from idgo_admin.models import License
+from idgo_admin.models import MappingCategory
+from idgo_admin.models import MappingLicence
 from idgo_admin.models import Organisation
 from idgo_admin.models import RemoteCkan
 from idgo_admin.models import RemoteCsw
@@ -129,10 +134,12 @@ class RemoteCkanForm(forms.ModelForm):
             'sync_with',
             'sync_frequency',
             )
+        mapping = tuple()
 
     url = forms.URLField(
-        label="URL du catalogue CKAN à synchroniser",
+        label="URL du catalogue CKAN*",
         required=True,
+        max_length=200,
         error_messages={
             'invalid': "L'adresse URL est erronée.",
             },
@@ -144,7 +151,7 @@ class RemoteCkanForm(forms.ModelForm):
         )
 
     sync_with = forms.MultipleChoiceField(
-        label="Organisations à synchroniser",
+        label="Organisations à synchroniser*",
         required=False,
         choices=(),  # ckan api -> list_organisations
         widget=CustomCheckboxSelectMultiple(
@@ -155,7 +162,7 @@ class RemoteCkanForm(forms.ModelForm):
         )
 
     sync_frequency = forms.ChoiceField(
-        label="Fréquence de synchronisation",
+        label="Fréquence de synchronisation*",
         required=True,
         choices=Meta.model.FREQUENCY_CHOICES,
         initial='never',
@@ -183,9 +190,92 @@ class RemoteCkanForm(forms.ModelForm):
                             'package_count',
                             organisation.get('packages', None))))
                     for organisation in organisations)
+
+            mapping = []
+
+            # Initialize categories mapping
+            # =============================
+            try:
+                with CkanBaseHandler(instance.url) as ckan:
+                    remote_categories = ckan.get_all_categories(all_fields=True)
+            except CkanBaseError as e:
+                logger.error(e)
+            else:
+                fields_name = []
+                for remote_category in remote_categories:
+                    field_name = ''.join(['cat_', remote_category['name']])
+                    fields_name.append(field_name)
+                    try:
+                        filter = {'remote_ckan': instance, 'slug': field_name[4:]}
+                        initial = MappingCategory.objects.filter(**filter).first().category
+                    except Exception as e:
+                        logger.warning(e)
+                        try:
+                            initial = Category.objects.get(slug=field_name[4:])
+                        except Exception as e:
+                            logger.warning(e)
+                            initial = None
+
+                    self.fields[field_name] = forms.ModelChoiceField(
+                        label=remote_category['title'],
+                        empty_label="Sélectionnez une valeur",
+                        required=False,
+                        queryset=Category.objects.all(),
+                        initial=initial,
+                        )
+
+                mapping.append({
+                    'name': 'Category',
+                    'title': 'Categories',
+                    'fields_name': fields_name,
+                    })
+
+            # Initialize licences mapping
+            # ===========================
+            try:
+                with CkanBaseHandler(instance.url) as ckan:
+                    remote_licenses = ckan.get_all_licenses(all_fields=True)
+            except CkanBaseError as e:
+                logger.error(e)
+            else:
+                fields_name = []
+                for remote_license in remote_licenses:
+                    field_name = ''.join(['lic_', remote_license['id']])
+                    fields_name.append(field_name)
+                    try:
+                        filter = {'remote_ckan': instance, 'slug': field_name[4:]}
+                        initial = MappingLicence.objects.filter(**filter).first().licence
+                    except Exception as e:
+                        logger.warning(e)
+                        try:
+                            initial = License.objects.get(slug=field_name[4:])
+                        except Exception as e:
+                            logger.warning(e)
+                            initial = None
+
+                    self.fields[field_name] = forms.ModelChoiceField(
+                        label=remote_license['title'],
+                        empty_label="Sélectionnez une valeur",
+                        required=False,
+                        queryset=License.objects.all(),
+                        initial=initial,
+                        )
+
+                mapping.append({
+                    'name': 'License',
+                    'title': 'Licences',
+                    'fields_name': fields_name,
+                    })
+
         else:
             self.fields['sync_with'].widget = forms.HiddenInput()
             self.fields['sync_frequency'].widget = forms.HiddenInput()
+
+    def get_category_fields(self):
+        return [self[val] for val in self.fields if val.startswith('cat')]
+
+    def get_licence_fields(self):
+        return [self[val] for val in self.fields if val.startswith('lic')]
 
 
 # ================================
@@ -199,37 +289,39 @@ class RemoteCswForm(forms.ModelForm):
         model = RemoteCsw
         fields = (
             'url',
-            'sync_with',
+            'getrecords',
             'sync_frequency',
             )
 
     url = forms.URLField(
-        label="URL du catalogue CKAN à synchroniser",
+        label="URL du CSW*",
         required=True,
+        max_length=200,
         error_messages={
             'invalid': "L'adresse URL est erronée.",
             },
         widget=forms.TextInput(
             attrs={
-                'placeholder': "https://demo.ckan.org",
+                # 'placeholder': "https://demo.ckan.org",
                 },
             ),
         )
 
-    sync_with = forms.MultipleChoiceField(
-        label="Organisations à synchroniser",
+    getrecords = forms.CharField(
+        label="GetRecords*",
         required=False,
-        choices=(),  # ckan api -> list_organisations
-        widget=CustomCheckboxSelectMultiple(
+        widget=forms.Textarea(
             attrs={
-                'class': 'list-group-checkbox',
+                'class': 'code',
+                'placeholder': '''<csw:GetRecords ...''',
+                'rows': 24,
                 },
             ),
         )
 
     sync_frequency = forms.ChoiceField(
-        label="Fréquence de synchronisation",
-        required=True,
+        label="Fréquence de synchronisation*",
+        required=False,
         choices=Meta.model.FREQUENCY_CHOICES,
         initial='never',
         )
@@ -241,19 +333,11 @@ class RemoteCswForm(forms.ModelForm):
         instance = kwargs.get('instance', None)
         if instance and instance.url:
             self.fields['url'].widget.attrs['readonly'] = True
-            # Récupérer la liste des organisations
             try:
                 with CswBaseHandler(instance.url) as csw:
-                    organisations = csw.get_all_organisations()
+                    pass
             except CswBaseError as e:
-                self.add_error('url', e.message)
-            else:
-                self.fields['sync_with'].choices = (
-                    (organisation['name'], '{} ({})'.format(
-                        organisation['display_name'],
-                        organisation.get('package_count', organisation.get('packages', None))))
-                    for organisation in organisations)
-
+                self.add_error('url', e.__str__())
         else:
-            self.fields['sync_with'].widget = forms.HiddenInput()
+            self.fields['getrecords'].widget = forms.HiddenInput()
             self.fields['sync_frequency'].widget = forms.HiddenInput()

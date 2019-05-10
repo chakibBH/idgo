@@ -87,7 +87,7 @@ def render_with_info_profile(
         'is_referent': user.get_roles()['is_referent'],
         'is_contributor': len(contributor) > 0,
         'is_admin': user.is_admin,
-        'organisation': organisation,
+        # 'organisation': organisation,
         'awaiting_member_status': awaiting_member_status,
         'contributor': contributor,
         'awaiting_contributor_status': awaiting_contributor_status,

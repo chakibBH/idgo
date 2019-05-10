@@ -60,7 +60,7 @@ decorators = [csrf_exempt, login_required(login_url=settings.LOGIN_URL)]
 def resource(request, dataset_id=None, *args, **kwargs):
     id = request.GET.get('id', request.GET.get('ckan_id'))
     if not id:
-        raise Http404
+        raise Http404()
 
     kvp = {}
     try:
@@ -181,6 +181,7 @@ class ResourceManager(View):
                 else:
                     error['__all__'] = [msg]
                 return JsonResponse(json.dumps({'error': error}), safe=False)
+
             return render_with_info_profile(request, self.template, context)
 
         data = form.cleaned_data
@@ -192,7 +193,7 @@ class ResourceManager(View):
             'lang': data['lang'],
             'data_type': data['data_type'],
             'format_type': data['format_type'],
-            'last_update': data['last_update'],
+            'last_update': data.get('last_update'),
             'restricted_level': data['restricted_level'],
             'up_file': data['up_file'],
             'dl_url': data['dl_url'],
@@ -227,9 +228,11 @@ class ResourceManager(View):
                 save_opts = {
                     'current_user': user,
                     'file_extras': file_extras,
-                    'synchronize': True}
+                    'synchronize': True,
+                    }
                 if not id:
                     resource = Resource.default.create(save_opts=save_opts, **kvp)
+                    save_opts['skip_download'] = True  # IMPORTANT
                 else:
                     resource = Resource.objects.get(pk=id)
                     for k, v in kvp.items():
@@ -305,7 +308,7 @@ class ResourceManager(View):
 
         id = request.POST.get('id', request.GET.get('id'))
         if not id:
-            raise Http404
+            raise Http404()
         include = {'id': id, 'dataset': dataset}
         resource = get_object_or_404_extended(Resource, user, include=include)
 

@@ -16,12 +16,13 @@
 
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from idgo_admin.models import AccountActions
 from idgo_admin.models import LiaisonsContributeurs
 from idgo_admin.models import LiaisonsReferents
+from idgo_admin.models import AccountActions
 import logging
 
 logger = logging.getLogger('django')
+
 
 class Command(BaseCommand):
 

@@ -14,7 +14,7 @@
 # under the License.
 
 
-from api.utils import parse_request
+# from api.utils import parse_request
 from collections import OrderedDict
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -85,26 +85,22 @@ def handle_pust_request(request, organisation_name=None):
 
     organisation = None
     if organisation_name:
-        organisation = get_object_or_404(
-            Organisation, slug=organisation_name)
+        organisation = get_object_or_404(Organisation, slug=organisation_name)
 
-    data = getattr(request, request.method).dict()
-    data_form = {
-        'legal_name': data.get('legal_name'),
-        'description': data.get('description'),
-        'organisation_type': data.get('type'),
-        'address': data.get('address'),
-        'postcode': data.get('postcode'),
-        'city': data.get('city'),
-        'phone': data.get('phone'),
-        'email': data.get('email'),
-        'license': data.get('license'),
-        'jurisdiction': data.get('jurisdiction'),
-        }
+    query_data = getattr(request, request.method)  # QueryDict
 
-    form = Form(
-        data_form, request.FILES,
-        instance=organisation, include={'user': user})
+    # Slug/Name
+    slug = query_data.pop('name', organisation and [organisation.slug])
+    if slug:
+        query_data.__setitem__('slug', slug[-1])
+
+    # `legal_name` est obligatoire
+    legal_name = query_data.pop('legal_name', organisation and [organisation.legal_name])
+    if legal_name:
+        query_data.__setitem__('legal_name', legal_name[-1])
+
+    form = Form(query_data, request.FILES,
+                instance=organisation, include={'user': user})
     if not form.is_valid():
         raise GenericException(details=form._errors)
 
@@ -116,8 +112,8 @@ def handle_pust_request(request, organisation_name=None):
         with transaction.atomic():
             if organisation_name:
                 for item in form.Meta.fields:
-                    if item in data_form:
-                        setattr(organisation, item, data_form[item])
+                    if item in data:
+                        setattr(organisation, item, data[item])
                 organisation.save()
             else:
                 kvp['is_active'] = True
@@ -147,18 +143,19 @@ class OrganisationShow(APIView):
                 return JsonResponse(organisation, safe=True)
         raise Http404()
 
-    def put(self, request, organisation_name):
-        """Créer une nouvelle organisation."""
-        request.PUT, request._files = parse_request(request)
-        if not request.user.is_admin:
-            raise Http404()
-        try:
-            handle_pust_request(request, organisation_name=organisation_name)
-        except Http404:
-            raise Http404()
-        except GenericException as e:
-            return JsonResponse({'error': e.details}, status=400)
-        return HttpResponse(status=204)
+    # def put(self, request, organisation_name):
+    #     """Mettre à jour l'organisation."""
+    #     request.PUT, request._files = parse_request(request)
+    #     request.PUT._mutable = True
+    #     if not request.user.profile.is_admin:
+    #         raise Http404()
+    #     try:
+    #         handle_pust_request(request, organisation_name=organisation_name)
+    #     except Http404:
+    #         raise Http404()
+    #     except GenericException as e:
+    #         return JsonResponse({'error': e.details}, status=400)
+    #     return HttpResponse(status=204)
 
 
 class OrganisationList(APIView):
@@ -177,12 +174,11 @@ class OrganisationList(APIView):
         if not request.user.is_admin:
             raise Http404()
         try:
-            handle_pust_request(request)
+            organisation = handle_pust_request(request)
         except Http404:
             raise Http404()
         except GenericException as e:
             return JsonResponse({'error': e.details}, status=400)
-
         response = HttpResponse(status=201)
-        response['Content-Location'] = ''
+        response['Content-Location'] = organisation.api_location
         return response

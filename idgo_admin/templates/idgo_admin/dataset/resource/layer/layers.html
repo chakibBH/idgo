@@ -12,7 +12,7 @@
 	{% if user.crige_membership %}
 	<button name="extractor" class="btn btn-default">Service d'extraction</button>
 	{% else %}
-	{% include "idgo_admin/extras/crige_restricted_access/button.html" with class="btn btn-default" text="Service d'extraction" name="extractor" %}
+	{% include "idgo_admin/extras/crige_restricted_access/button.html" with class="btn btn-default" text="Service d'extraction" name="extractor" modal_target="modal_forbidden" %}
 	{% endif %}
 	<button name="view-ckan" class="btn btn-default">Ouvrir dans CKAN</button>
 	<button name="edit-layer" class="btn btn-default">Configurer le service</button>
@@ -85,7 +85,7 @@ $(function() {
 	$('button[name="extractor"]').on('click', function(e) {
 		e.preventDefault();
 		const data = tableGrid.getRowValues(tableGrid.lastSelectedRowIndex);
-		redirect('{% url "idgo_admin:extractor" site_name="extractor" %}?&layer=' + data['id'])
+		targetBlank('{% url "idgo_admin:extractor" site_name="extractor" %}?&layer=' + data['id'])
 		e.stopPropagation();
 	});
 	{% endif %}

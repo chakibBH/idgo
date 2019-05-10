@@ -24,13 +24,14 @@ from django.http import JsonResponse
 from idgo_admin.exceptions import CkanBaseError
 from idgo_admin.exceptions import GenericException
 from idgo_admin.forms.dataset import DatasetForm as Form
+from idgo_admin.models import Category
 from idgo_admin.models import Dataset
+from idgo_admin.models import DataType
 from idgo_admin.models import License
 from idgo_admin.models.mail import send_dataset_creation_mail
 from idgo_admin.models.mail import send_dataset_delete_mail
 from idgo_admin.models.mail import send_dataset_update_mail
 from idgo_admin.models import Organisation
-from idgo_admin.utils import slugify
 from rest_framework import permissions
 from rest_framework.views import APIView
 
@@ -113,7 +114,10 @@ def handler_get_request(request):
 
 def handle_pust_request(request, dataset_name=None):
     # name -> slug
-    # published -> private
+    # type -> data_type
+    # categories/category -> categories
+    # private -> published
+
     user = request.user
     dataset = None
     if dataset_name:
@@ -124,59 +128,92 @@ def handle_pust_request(request, dataset_name=None):
         if not instance:
             raise Http404()
 
-    # TODO: Vérifier les droits
+    query_data = getattr(request, request.method)  # QueryDict
 
-    data = getattr(request, request.method).dict()
+    # slug/name
+    slug = query_data.pop('name', dataset and [dataset.slug])
+    if slug:
+        query_data.__setitem__('slug', slug[-1])
 
-    organisation_slug = data.get('organisation')
+    # `title` est obligatoire
+    title = query_data.pop('title', dataset and [dataset.title])
+    if title:
+        query_data.__setitem__('title', title[-1])
+
+    # `organisation`
+    organisation_slug = query_data.pop('organisation', None)
     if organisation_slug:
         try:
-            organisation = Organisation.objects.get(slug=organisation_slug)
+            organisation = Organisation.objects.get(slug=organisation_slug[-1])
         except Organisation.DoesNotExist as e:
             raise GenericException(details=e.__str__())
     elif dataset:
         organisation = dataset.organisation
     else:
         organisation = None
+    if organisation:
+        query_data.__setitem__('organisation', organisation.pk)
 
-    license_slug = data.get('license')
-    if data.get('license'):
+    # `licence`
+    license_slug = query_data.pop('license', None)
+    if license_slug:
         try:
-            license = License.objects.get(slug=license_slug)
+            license = License.objects.get(slug=license_slug[-1])
         except License.DoesNotExist as e:
             raise GenericException(details=e.__str__())
     elif dataset:
         license = dataset.license
     else:
         license = None
+    if license:
+        query_data.__setitem__('license', license.pk)
 
-    data_form = {
-        'title': data.get('title', dataset and dataset.title),
-        'slug': data.get('name', slugify(data.get('title'))),
-        'description': data.get('description'),
-        # 'thumbnail' -> request.FILES
-        'keywords': data.get('keywords'),
-        'categories': data.get('categories'),
-        'date_creation': data.get('date_creation'),
-        'date_modification': data.get('date_modification'),
-        'date_publication': data.get('date_publication'),
-        'update_frequency': data.get('update_frequency'),
-        # 'geocover'
-        'granularity': data.get('granularity', 'indefinie'),
-        'organisation': organisation.pk,
-        'license': license.pk,
-        'support': data.get('support', True),
-        'data_type': data.get('type'),
-        'owner_name': data.get('owner_name'),
-        'owner_email': data.get('owner_email'),
-        'broadcaster_name': data.get('broadcaster_name'),
-        'broadcaster_email': data.get('broadcaster_email'),
-        'published': not data.get('private', False),
-        }
+    # `categories`
+    category_slugs = query_data.pop('categories', query_data.pop('category', None))
+    if category_slugs:
+        try:
+            categories = Category.objects.filter(slug__in=category_slugs)
+        except Category.DoesNotExist as e:
+            raise GenericException(details=e.__str__())
+    elif dataset:
+        categories = dataset.categories.all()
+    else:
+        categories = None
+    if categories:
+        query_data.setlist('categories', [instance.pk for instance in categories])
+
+    # `data_type`
+    data_type_slugs = query_data.pop('types', query_data.pop('type', query_data.pop('data_type', None)))
+    if data_type_slugs:
+        try:
+            data_type = DataType.objects.filter(slug__in=data_type_slugs)
+        except DataType.DoesNotExist as e:
+            raise GenericException(details=e.__str__())
+    elif dataset:
+        data_type = dataset.data_type.all()
+    else:
+        data_type = None
+    if data_type:
+        query_data.setlist('data_type', [instance.pk for instance in data_type])
+
+    # `keywords`
+    keyword_tags = query_data.pop('keywords', query_data.pop('keyword', None))
+    if keyword_tags:
+        query_data.__setitem__('keywords', ','.join(keyword_tags))
+
+    # `published` or `private`
+    published = query_data.pop('published', None)
+    private = query_data.pop('private', None)
+    if (published and published[-1].lower() in ('on', 'true',)) or \
+            (private and private[-1].lower() in ('off', 'false',)):
+        query_data.__setitem__('published', True)
+    elif (published and published[-1].lower() in ('off', 'false',)) or \
+            (private and private[-1].lower() in ('on', 'true',)):
+        query_data.__setitem__('published', False)
 
     pk = dataset and dataset.pk or None
     include = {'user': user, 'id': pk, 'identification': pk and True or False}
-    form = Form(data_form, request.FILES, instance=dataset, include=include)
+    form = Form(query_data, request.FILES, instance=dataset, include=include)
     if not form.is_valid():
         raise GenericException(details=form._errors)
 
@@ -214,14 +251,18 @@ def handle_pust_request(request, dataset_name=None):
                 kvp['editor'] = user
                 save_opts = {'current_user': user, 'synchronize': False}
                 dataset = Dataset.default.create(save_opts=save_opts, **kvp)
-
-            dataset.categories.set(data.get('categories', []), clear=True)
+            # categories
+            categories = Category.objects.filter(pk__in=data.get('categories'))
+            dataset.categories.set(categories, clear=True)
+            # data_type
+            data_type = DataType.objects.filter(pk__in=data.get('data_type'))
+            dataset.data_type.set(data_type, clear=True)
+            # keywords
             keywords = data.get('keywords')
             if keywords:
                 dataset.keywords.clear()
                 for k in keywords:
                     dataset.keywords.add(k)
-            dataset.data_type.set(data.get('data_type', []), clear=True)
             dataset.save(current_user=user, synchronize=True)
     except ValidationError as e:
         form.add_error('__all__', e.__str__())
@@ -253,6 +294,7 @@ class DatasetShow(APIView):
     def put(self, request, dataset_name):
         """Modifier le jeu de données."""
         request.PUT, request._files = parse_request(request)
+        request.PUT._mutable = True
         try:
             handle_pust_request(request, dataset_name=dataset_name)
         except Http404:
@@ -290,12 +332,13 @@ class DatasetList(APIView):
 
     def post(self, request):
         """Créer un nouveau jeu de données."""
+        request.POST._mutable = True
         try:
-            handle_pust_request(request)
+            dataset = handle_pust_request(request)
         except Http404:
             raise Http404()
         except GenericException as e:
             return JsonResponse({'error': e.details}, status=400)
         response = HttpResponse(status=201)
-        response['Content-Location'] = ''
+        response['Content-Location'] = dataset.api_location
         return response

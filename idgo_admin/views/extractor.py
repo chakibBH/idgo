@@ -209,7 +209,7 @@ class Extractor(View):
         try:
             return ModelObj.objects.get(**{key: value})
         except (ModelObj.DoesNotExist, ValueError):
-            raise Http404
+            raise Http404()
 
     def _context(self, user, organisation=None, dataset=None,
                  resource=None, layer=None, task=None):

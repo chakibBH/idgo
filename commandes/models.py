@@ -21,8 +21,6 @@ from django.utils import timezone
 
 User = get_user_model()
 
-TODAY = timezone.now().date()
-
 
 class Order(models.Model):
 
@@ -36,7 +34,7 @@ class Order(models.Model):
     date = models.DateField(
         verbose_name='Date de la demande',
         null=True,
-        default=TODAY
+        default=timezone.now
         )
 
     status = models.IntegerField(

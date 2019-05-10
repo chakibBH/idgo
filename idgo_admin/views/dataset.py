@@ -18,6 +18,7 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.db import transaction
 from django.http import Http404
 from django.http import HttpResponse
@@ -34,6 +35,7 @@ from idgo_admin.forms.dataset import DatasetForm as Form
 from idgo_admin.models import Category
 from idgo_admin.models import Dataset
 from idgo_admin.models import LiaisonsContributeurs
+from idgo_admin.models import LiaisonsReferents
 from idgo_admin.models import License
 from idgo_admin.models.mail import send_dataset_creation_mail
 from idgo_admin.models.mail import send_dataset_delete_mail
@@ -65,7 +67,7 @@ def target(dataset, user):
     return 'all'
 
 
-def get_filtered_datasets(QuerySet, params):
+def get_filtered_datasets(datasets, params):
     filters = {}
 
     organisation = params.get('organisation', None)
@@ -101,7 +103,7 @@ def get_filtered_datasets(QuerySet, params):
     if resource_format:
         filters['resource__format_type__slug'] = resource_format
 
-    return QuerySet.filter(**filters)
+    return datasets.filter(**filters)
 
 
 def handle_context(QuerySet, qs, user=None, target='mine'):
@@ -138,12 +140,27 @@ def handle_context(QuerySet, qs, user=None, target='mine'):
     all_datasets = [
         {'id': instance.slug, 'title': instance.title}
         for instance in QuerySet.all()]
+    # Alternative si prec trop long
+    # from django.db.models import F
+    # all_datasets = QuerySet.annotate(
+    #     buff=F('slug')).values('buff', 'title').annotate(id=F('buff')).values('id', 'title')
 
     pk__in = set([
         x.pk for y in [m.categories.all() for m in QuerySet.all()] for x in y])
     all_categories = [
         {'id': instance.slug, 'name': instance.name}
         for instance in Category.objects.filter(pk__in=pk__in)]
+    # Alternative si prec trop long
+    # from django.db.models import F
+    # all_categories = QuerySet.exclude(
+    #     categories=None
+    # ).annotate(
+    #     buff=F('categories__slug')
+    # ).values(
+    #     'buff', 'categories__name'
+    # ).annotate(
+    #     id=F('buff'), name=F('categories__name')
+    # ).values('id', 'name').distinct('categories')
 
     pk__in = set([m.license.pk for m in QuerySet.all() if m.license])
     all_licenses = [
@@ -215,12 +232,22 @@ def list_my_datasets(request, *args, **kwargs):
 @csrf_exempt
 def list_all_datasets(request, *args, **kwargs):
     user = request.user
+
     # Réservé aux référents ou administrateurs IDGO
     roles = user.get_roles()
-    if not roles['is_referent'] and not roles['is_admin']:
+    if roles['is_admin']:
+        datasets = Dataset.default.all()
+    elif roles['is_referent']:
+        kwargs = {'user': user, 'validated_on__isnull': False}
+        organisation__in = set(instance.organisation for instance
+                               in LiaisonsReferents.objects.filter(**kwargs))
+
+        datasets = Dataset.default.filter(
+            Q(editor=user) | Q(organisation__in=organisation__in))
+    else:
         raise Http404()
     context = handle_context(
-        Dataset.default, request.GET, target='all')
+        datasets, request.GET, target='all')
     return render_with_info_profile(
         request, 'idgo_admin/dataset/datasets.html', status=200, context=context)
 

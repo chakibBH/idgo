@@ -26,6 +26,7 @@ from django.db.models.signals import post_delete
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.contrib.auth import get_user_model
+from django.urls import reverse
 from django.utils import timezone
 from functools import reduce
 from idgo_admin.ckan_module import CkanHandler
@@ -356,8 +357,17 @@ class Resource(models.Model):
         default=False,
         )
 
+    EXTRA_FREQUENCY_CHOICES = (
+        ('5mn', 'Toutes les 5 minutes'),
+        ('15mn', 'Toutes les 15 minutes'),
+        ('20mn', 'Toutes les 20 minutes'),
+        ('30mn', 'Toutes les 30 minutes'),
+        )
+
     FREQUENCY_CHOICES = (
-        ('never', 'Jamais'),
+        ('1hour', 'Toutes les heures'),
+        ('3hours', 'Toutes les trois heures'),
+        ('6hours', 'Toutes les six heures'),
         ('daily', 'Quotidienne (tous les jours à minuit)'),
         ('weekly', 'Hebdomadaire (tous les lundi)'),
         ('bimonthly', 'Bimensuelle (1er et 15 de chaque mois)'),
@@ -365,6 +375,7 @@ class Resource(models.Model):
         ('quarterly', 'Trimestrielle (1er des mois de janvier, avril, juillet, octobre)'),
         ('biannual', 'Semestrielle (1er janvier et 1er juillet)'),
         ('annual', 'Annuelle (1er janvier)'),
+        ('never', 'Jamais'),
         )
 
     sync_frequency = models.CharField(
@@ -372,7 +383,7 @@ class Resource(models.Model):
         max_length=20,
         blank=True,
         null=True,
-        choices=FREQUENCY_CHOICES,
+        choices=FREQUENCY_CHOICES + EXTRA_FREQUENCY_CHOICES,
         default='never',
         )
 
@@ -415,6 +426,11 @@ class Resource(models.Model):
             self.dataset.slug, self.ckan_id))
 
     @property
+    def api_location(self):
+        kwargs = {'dataset_name': self.dataset.slug, 'resource_id': self.ckan_id}
+        return reverse('api:resource_show', kwargs=kwargs)
+
+    @property
     def title_overflow(self):
         return three_suspension_points(self.title)
 
@@ -429,7 +445,8 @@ class Resource(models.Model):
     # Méthodes héritées
     # =================
 
-    def save(self, *args, current_user=None, synchronize=False, file_extras=None, **kwargs):
+    def save(self, *args, current_user=None, synchronize=False,
+             file_extras=None, skip_download=False, **kwargs):
 
         # Version précédante de la ressource (avant modification)
         previous, created = self.pk \
@@ -454,13 +471,19 @@ class Resource(models.Model):
         if self.geo_restriction:
             self.ogc_services = False
 
+        self.last_update = timezone.now()
+
+        if created:
+            super().save(*args, **kwargs)
+            kwargs['force_insert'] = False
+
         # Quelques contrôles sur les fichiers de données téléversée ou à télécharger
         filename = False
         content_type = None
         file_must_be_deleted = False  # permet d'indiquer si les fichiers doivent être supprimés à la fin de la chaine de traitement
         publish_raw_resource = True  # permet d'indiquer si les ressources brutes sont publiées dans CKAN
 
-        if self.ftp_file:
+        if self.ftp_file and not skip_download:
             filename = self.ftp_file.file.name
             # Si la taille de fichier dépasse la limite autorisée,
             # on traite les données en fonction du type détecté
@@ -496,13 +519,10 @@ class Resource(models.Model):
         elif (self.up_file and file_extras):
             # GDAL/OGR ne semble pas prendre de fichier en mémoire..
             # ..à vérifier mais si c'est possible comment indiquer le vsi en préfixe du filename ?
-            super().save(*args, **kwargs)
-            kwargs['force_insert'] = False
-
             filename = self.up_file.file.name
             file_must_be_deleted = True
 
-        elif self.dl_url:
+        elif self.dl_url and not skip_download:
             try:
                 directory, filename, content_type = download(
                     self.dl_url, settings.MEDIA_ROOT, max_size=DOWNLOAD_SIZE_LIMIT)
@@ -657,12 +677,6 @@ class Resource(models.Model):
                                 raise ValidationError(e.__str__(), code='__all__')
 
                             else:
-                                # Avant de créer des relations, l'objet doit exister
-                                if created:
-                                    # S'il s'agit d'une création, alors on sauve l'objet.
-                                    super().save(*args, **kwargs)
-                                    kwargs['force_insert'] = False
-
                                 # Ensuite, pour tous les jeux de données SIG trouvés,
                                 # on crée le service ows à travers la création de `Layer`
                                 try:
@@ -716,12 +730,6 @@ class Resource(models.Model):
                                     'mais le système de coordonnées de celles-ci '
                                     "n'est pas supporté par l'application.")
                                 raise ValidationError(msg, code='__all__')
-
-                            else:
-                                if created:
-                                    # S'il s'agit d'une création, alors on sauve l'objet.
-                                    super().save(*args, **kwargs)
-                                    kwargs['force_insert'] = False
 
                             # Super Crado Code
                             s0 = str(self.ckan_id)
@@ -922,6 +930,8 @@ class Resource(models.Model):
                 data['upload'] = self.ftp_file.file
             data['size'] = self.ftp_file.size
             data['mimetype'] = None  # TODO
+            # Passe dans un validateur pour forcer en base : url_type='upload'
+            data['force_url_type'] = 'upload'
 
         if self.data_type == 'raw':
             if self.ftp_file or self.dl_url or self.up_file:

@@ -165,9 +165,24 @@ class CkanBaseHandler(object):
         self.remote.close()
         logger.info('Close CKAN connection')
 
-    @timeout
+    # @timeout
     def call_action(self, action, **kwargs):
         return self.remote.call_action(action, kwargs)
+
+    @CkanExceptionsHandler()
+    def get_all_categories(self, *args, **kwargs):
+        kwargs.setdefault('order_by', 'name')
+        return [
+            category for category
+            in self.call_action('group_list', **kwargs)]
+
+    @CkanExceptionsHandler()
+    def get_all_licenses(self, *args, **kwargs):
+        try:
+            action_result = self.call_action('license_list', **kwargs)
+        except CkanError.CKANAPIError:
+            action_result = self.call_action('licence_list', **kwargs)
+        return [license for license in action_result]
 
     @CkanExceptionsHandler()
     def get_all_organisations(self, *args, **kwargs):
@@ -198,7 +213,7 @@ class CkanBaseHandler(object):
         return self.get_package(name) and True or False
 
     @CkanExceptionsHandler()
-    @timeout
+    # @timeout
     def push_resource(self, package, **kwargs):
         kwargs['package_id'] = package['id']
         kwargs['created'] = datetime.now().isoformat()

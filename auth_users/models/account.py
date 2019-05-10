@@ -84,7 +84,7 @@ class User(AbstractUser):
         verbose_name="Organisations dont l'utilisateur est contributeur",
     )
 
-    roles = models.ManyToManyField(to='auth_user.Role')
+    roles = models.ManyToManyField(to='idgo_admin.Role')
 
     # Objects Managers
     objects = UserManager()
@@ -105,7 +105,7 @@ class User(AbstractUser):
         GdprUser = apps.get_model(app_label='auth_users', model_name='GdprUser')
         try:
             GdprUser.objects.get(user=self, gdpr=Gdpr.objects.latest('issue_date'))
-        except GdprUser.DoesNotExist:
+        except (GdprUser.DoesNotExist, Gdpr.DoesNotExist):
             return False
         else:
             return True

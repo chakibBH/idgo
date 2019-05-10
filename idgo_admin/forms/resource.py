@@ -23,8 +23,7 @@ from django.db.models import Value
 from django.db.models import When
 from django import forms
 from django.forms.models import ModelChoiceIterator
-from django.utils import timezone
-from idgo_admin.forms import CustomCheckboxSelectMultiple
+from idgo_admin.forms.fields import CustomCheckboxSelectMultiple
 from idgo_admin.models import Organisation
 from idgo_admin.models import Resource
 from idgo_admin.models import ResourceFormats
@@ -211,6 +210,7 @@ class ResourceForm(forms.ModelForm):
     sync_frequency_dl = forms.ChoiceField(
         label="Fréquence de synchronisation",
         required=False,
+        initial='never',
         choices=Meta.model.FREQUENCY_CHOICES,
         widget=forms.Select(
             attrs={
@@ -229,6 +229,7 @@ class ResourceForm(forms.ModelForm):
     sync_frequency_ftp = forms.ChoiceField(
         label="Fréquence de synchronisation",
         required=False,
+        initial='never',
         choices=Meta.model.FREQUENCY_CHOICES,
         widget=forms.Select(
             attrs={
@@ -260,7 +261,7 @@ class ResourceForm(forms.ModelForm):
 
     data_type = forms.ChoiceField(
         label="Type",
-        required=False,
+        required=True,
         choices=Meta.model.TYPE_CHOICES,
         )
 
@@ -352,17 +353,20 @@ class ResourceForm(forms.ModelForm):
                 choices.append((filename, filename[len(dir) + 1:]))
         self.fields['ftp_file'].choices = choices
 
-        if instance and instance.up_file:
-            self.fields['up_file'].widget.attrs['value'] = instance.up_file
+        if user.profile.is_admin:
+            choices = self.Meta.model.EXTRA_FREQUENCY_CHOICES + self.Meta.model.FREQUENCY_CHOICES
+            self.fields['sync_frequency_ftp'].choices = choices
+            self.fields['sync_frequency_dl'].choices = choices
 
         if instance:
+
             related_profiles = Case(
                 When(pk__in=[m.pk for m in instance.profiles_allowed.all()], then=Value(True)),
                 default=Value(False),
                 output_field=BooleanField(),
                 )
             self.fields['profiles_allowed'].queryset = \
-                Organisation.objects.annotate(related=related_profiles).order_by('-related', 'slug')
+                Profile.objects.annotate(related=related_profiles).order_by('-related', 'user__username')
 
             related_organisations = Case(
                 When(pk__in=[m.pk for m in instance.organisations_allowed.all()], then=Value(True)),
@@ -371,6 +375,15 @@ class ResourceForm(forms.ModelForm):
                 )
             self.fields['organisations_allowed'].queryset = \
                 Organisation.objects.annotate(related=related_organisations).order_by('-related', 'slug')
+
+            if instance.up_file:
+                self.fields['up_file'].widget.attrs['value'] = instance.up_file
+            elif instance.ftp_file:
+                self.fields['synchronisation_ftp'].initial = instance.synchronisation
+                self.fields['sync_frequency_ftp'].initial = instance.sync_frequency
+            elif instance.dl_url:
+                self.fields['synchronisation_dl'].initial = instance.synchronisation
+                self.fields['sync_frequency_dl'].initial = instance.sync_frequency
 
     def clean(self):
 
@@ -399,7 +412,5 @@ class ResourceForm(forms.ModelForm):
             for k, v in res_l.items():
                 if v:
                     self.add_error(k, error_msg)
-
-        self.cleaned_data['last_update'] = timezone.now().date()
 
         return self.cleaned_data

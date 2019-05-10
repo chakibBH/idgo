@@ -15,11 +15,77 @@
 
 
 from django.utils.text import slugify
+from functools import wraps
 from idgo_admin.exceptions import CswBaseError
 from idgo_admin import logger
+import inspect
+import os
 from owslib.csw import CatalogueServiceWeb
 from owslib.fes import PropertyIsEqualTo
 import re
+import timeout_decorator
+
+
+CSW_TIMEOUT = 36000
+
+
+def timeout(fun):
+    t = CSW_TIMEOUT  # in seconds
+
+    @timeout_decorator.timeout(t, use_signals=False)
+    def return_with_timeout(fun, args=tuple(), kwargs=dict()):
+        return fun(*args, **kwargs)
+
+    @wraps(fun)
+    def wrapper(*args, **kwargs):
+        return return_with_timeout(fun, args=args, kwargs=kwargs)
+
+    return wrapper
+
+
+class CswReadError(CswBaseError):
+    message = "L'url ne semble pas indiquer un service CSW."
+
+
+class CswTimeoutError(CswBaseError):
+    message = "Le service CSW met du temps à répondre, celui-ci est peut-être temporairement inaccessible."
+
+
+class CswError(CswBaseError):
+    message = "Une erreur est survenue."
+
+
+class CswExceptionsHandler(object):
+
+    def __init__(self, ignore=None):
+        self.ignore = ignore or []
+
+    def __call__(self, f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+
+            root_dir = os.path.dirname(os.path.abspath(__file__))
+            info = inspect.getframeinfo(inspect.stack()[1][0])
+            logger.debug(
+                'Run {} (called by file "{}", line {}, in {})'.format(
+                    f.__qualname__,
+                    info.filename.replace(root_dir, '.'),
+                    info.lineno,
+                    info.function))
+
+            try:
+                return f(*args, **kwargs)
+            except Exception as e:
+                logger.exception(e)
+                if isinstance(e, timeout_decorator.TimeoutError):
+                    raise CswTimeoutError
+                if self.is_ignored(e):
+                    return f(*args, **kwargs)
+                raise CswError(e.__str__())
+        return wrapper
+
+    def is_ignored(self, exception):
+        return type(exception) in self.ignore
 
 
 class CswBaseHandler(object):
@@ -28,10 +94,12 @@ class CswBaseHandler(object):
         self.url = url
         self.username = username
         self.password = password
-
-        self.remote = CatalogueServiceWeb(
-            self.url, timeout=3600, lang='fr-FR', version='2.0.2',
-            skip_caps=True, username=self.username, password=self.password)
+        try:
+            self.remote = CatalogueServiceWeb(
+                self.url, timeout=3600, lang='fr-FR', version='2.0.2',
+                skip_caps=True, username=self.username, password=self.password)
+        except Exception:
+            raise CswReadError()
 
     def __enter__(self):
         return self
@@ -43,45 +111,20 @@ class CswBaseHandler(object):
         # Fake
         logger.info('Close CSW connection')
 
-    def get_all_organisations(self, *args, **kwargs):
-        self.remote.getdomain('OrganisationName', dtype='property')
-        result = []
-        _get_domain = self.remote.results.copy()
-        for value in _get_domain.get('values'):
-            organisation = \
-                self.get_organisation(value, resulttype='hits', esn='brief')
-            result.append(organisation)
-        return result
-
-    def get_organisation(self, id, include_datasets=False, **kwargs):
-        if include_datasets:
-            kwargs['resulttype'] = 'results'
-            kwargs['esn'] = 'summary'
-        else:
-            kwargs['resulttype'] = 'hits'
-        kwargs['constraints'] = [PropertyIsEqualTo('OrganisationName', id)]
+    @CswExceptionsHandler()
+    def get_packages(self, *args, **kwargs):
         self.remote.getrecords2(**kwargs)
         results = self.remote.results.copy()
         records = self.remote.records.copy()
-        data = {
-            'name': id,
-            'display_name': id,
-            'package_count': results.get('matches'),
-            }
-        if include_datasets:
-            data['packages'] = [
-                self.get_package(k) for k in list(records.keys())]
-        return data
 
-    def format_csw_record(obj):
-        data = {}
+        return [self.get_package(k) for k in list(records.keys())]
 
-        return data
-
+    @CswExceptionsHandler()
     def get_package(self, id, *args, **kwargs):
 
         self.remote.getrecordbyid(
             [id], outputschema='http://www.isotc211.org/2005/gmd')
+
         records = self.remote.records.copy()
 
         rec = records[id]
@@ -89,8 +132,8 @@ class CswBaseHandler(object):
         xml = rec.xml
         if not rec.__class__.__name__ == 'MD_Metadata':
             raise CswBaseError('outputschema error')
-        if not (rec.stdname == 'ISO 19115:2003/19139' and rec.stdver == '1.0'):
-            raise CswBaseError('outputschema error')
+        # if not (rec.stdname == 'ISO 19115:2003/19139' and rec.stdver == '1.0'):
+        #     raise CswBaseError('outputschema error: stdname:{} stdver:{}'.format(rec.stdname, rec.stdver))
         if not rec.hierarchy == 'dataset':
             raise CswBaseError('Not a Dataset')
 

@@ -32,6 +32,7 @@ from idgo_admin.models.mail import send_resource_delete_mail
 from idgo_admin.models.mail import send_resource_update_mail
 from idgo_admin.models import Organisation
 from idgo_admin.models import Resource
+from idgo_admin.models import ResourceFormats
 from idgo_admin.shortcuts import get_object_or_404_extended
 from rest_framework import permissions
 from rest_framework.views import APIView
@@ -44,7 +45,7 @@ def serialize(resource):
 
     if resource.format_type:
         format = OrderedDict([
-            ('id', resource.format_type.pk),
+            ('name', resource.format_type.slug),
             ('description', resource.format_type.description),
             ])
     else:
@@ -113,46 +114,45 @@ def handle_pust_request(request, dataset_name, resource_id=None):
     if resource_id:
         resource = get_object_or_404(Resource, ckan_id=resource_id)
 
-    # TODO: Vérifier les droits
+    query_data = getattr(request, request.method)  # QueryDict
 
-    data = getattr(request, request.method).dict()
+    # `title` est obligatoire
+    title = query_data.pop('title', resource and [resource.title])
+    if title:
+        query_data.__setitem__('title', title[-1])
 
-    restricted_list = data.get('restricted_list', [])
+    # `lang` est obligatoire
+    lang = query_data.pop('language', query_data.pop('lang', resource and [resource.lang]))
+    if lang:
+        query_data.__setitem__('lang', lang[-1])
+
+    # `data_type` est obligatoire
+    data_type = query_data.pop('data_type', query_data.pop('type', resource and [resource.data_type]))
+    if data_type:
+        query_data.__setitem__('data_type', data_type[-1])
+
+    restricted_list = query_data.pop('restricted_list', [])
     profiles_allowed = None
     organisations_allowed = None
 
-    restricted_level = data.get('restricted_level')
-    if restricted_level == 'only_allowed_users':
+    restricted_level = query_data.pop('restricted_level', resource and [resource.restricted_level] or ['public'])
+    if restricted_level[-1] == 'only_allowed_users':
         profiles_allowed = User.objects.filter(username__in=restricted_list)
-    elif restricted_level in ('same_organization', 'any_organization'):
+        query_data.__setitem__('profiles_allowed', [instance.pk for instance in profiles_allowed])
+    elif restricted_level[-1] in ('same_organization', 'any_organization'):
         organisations_allowed = Organisation.objects.filter(slug__in=restricted_list)
+        query_data.__setitem__('organisations_allowed', [instance.pk for instance in organisations_allowed])
+    query_data.__setitem__('restricted_level', restricted_level[-1])
 
-    data_form = {
-        'title': data.get('title'),
-        'description': data.get('description'),
-        'lang': data.get('language', 'french'),
-        'format_type': data.get('format'),
-        'data_type': data.get('type'),
-        'restricted_level': restricted_level,
-        'profiles_allowed': profiles_allowed,
-        'organisations_allowed': organisations_allowed,
-        # 'up_file': '',
-        # 'dl_url': '',
-        # 'synchronisation': '',
-        # 'sync_frequency': '',
-        # 'referenced_url': '',
-        # 'ftp_file': '',
-        'crs': data.get('crs', None),
-        'encoding': data.get('encoding', None),
-        # 'extractable': data.get('extractable'),
-        # 'ogc_services': data.get('ogc_services'),
-        # 'geo_restriction': data.get('geo_restriction'),
-        # 'last_update': data.get('last_update'),
-        }
+    format_type_slug = query_data.pop('format_type', query_data.pop('format', None))
+    if format_type_slug:
+        try:
+            resource_format = ResourceFormats.objects.get(slug=format_type_slug[-1])
+        except ResourceFormats.DoesNotExist as e:
+            raise GenericException(details=e.__str__())
+        query_data.__setitem__('format_type', resource_format.pk)
 
-    form = Form(
-        data_form, request.FILES,
-        instance=resource, dataset=dataset, user=user)
+    form = Form(query_data, request.FILES, instance=resource, dataset=dataset, user=user)
     if not form.is_valid():
         raise GenericException(details=form._errors)
 
@@ -167,10 +167,10 @@ def handle_pust_request(request, dataset_name, resource_id=None):
         'last_update': data['last_update'],
         'restricted_level': data['restricted_level'],
         'up_file': data['up_file'],
-        # 'dl_url': data['dl_url'],
+        'dl_url': data['dl_url'],
         # 'synchronisation': data['synchronisation'],
         # 'sync_frequency': data['sync_frequency'],
-        # 'referenced_url': data['referenced_url'],
+        'referenced_url': data['referenced_url'],
         # 'ftp_file': data['ftp_file'],
         'crs': data['crs'],
         'encoding': data.get('encoding') or None,
@@ -200,19 +200,18 @@ def handle_pust_request(request, dataset_name, resource_id=None):
                 'current_user': user,
                 'file_extras': file_extras,
                 'synchronize': True}
-            if not id:
-                resource = Resource.default.create(save_opts=save_opts, **kvp)
-            else:
-                resource = Resource.objects.get(pk=id)
+            if resource:
                 for k, v in kvp.items():
                     setattr(resource, k, v)
+            else:
+                resource = Resource.default.create(save_opts=save_opts, **kvp)
             if organisations_allowed:
                 resource.organisations_allowed = organisations_allowed
             if profiles_allowed:
                 resource.profiles_allowed = profiles_allowed
                 save_opts['synchronize'] = True
                 save_opts['file_extras'] = None  # IMPORTANT
-                resource.save(**save_opts)
+            resource.save(**save_opts)
     except ValidationError as e:
         if e.code == 'crs':
             form.add_error(e.code, '')
@@ -254,6 +253,7 @@ class ResourceShow(APIView):
     def put(self, request, dataset_name, resource_id):
         """Modifier la ressource."""
         request.PUT, request._files = parse_request(request)
+        request.PUT._mutable = True
         try:
             resource_id = UUID(resource_id)
         except ValueError:
@@ -298,12 +298,13 @@ class ResourceList(APIView):
 
     def post(self, request, dataset_name):
         """Ajouter une ressource au jeu de données."""
+        request.POST._mutable = True
         try:
-            handle_pust_request(request, dataset_name)
+            resource = handle_pust_request(request, dataset_name)
         except Http404:
             raise Http404()
         except GenericException as e:
             return JsonResponse({'error': e.details}, status=400)
         response = HttpResponse(status=201)
-        response['Content-Location'] = ''
+        response['Content-Location'] = resource.api_location
         return response

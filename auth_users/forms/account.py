@@ -38,9 +38,9 @@ from auth_users.forms import PasswordField
 from auth_users.forms import PhoneField
 from auth_users.forms import PostcodeField
 from auth_users.forms import ReferentField
-from auth_users.forms import TermsAndConditionsField
 from auth_users.forms import UsernameField
 from auth_users.forms import WebsiteField
+from auth_users.models import Gdpr
 from mama_cas.forms import LoginForm as MamaLoginForm
 
 from idgo_admin.models import Dataset
@@ -217,6 +217,19 @@ class ModelOrganisationField(forms.ModelChoiceField):
     iterator = ModelOrganisationIterator
 
 
+class TermsAndConditionsCheckBoxInput(forms.CheckboxInput):
+    template_name = 'idgo_admin/widgets/terms_and_conditions.html'
+
+    def __init__(self, attrs=None, check_test=None, modal=None):
+        self.modal = modal
+        super().__init__(attrs)
+
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        context['modal'] = self.modal
+        return context
+
+
 class SignInForm(MamaLoginForm):
 
     username = UsernameField(required=True)
@@ -317,15 +330,36 @@ class SignUpForm(forms.Form):
     contributor = ContributorField()
     referent = ReferentField()
 
-    terms_and_conditions = TermsAndConditionsField()
+    terms_and_conditions = forms.BooleanField(
+        label=(
+            '<a data-toggle="modal" data-target="#modal-terms">'
+            "J'ai lu et j'accepte les conditions générales d'utilisation du service."
+            '<a>'),
+        initial=False,
+        required=True,
+        widget=TermsAndConditionsCheckBoxInput(
+            attrs={
+                'oninvalid': "this.setCustomValidity('Vous devez accepter les conditions générales d'utilisation.')",
+                'oninput': "setCustomValidity('')",
+                },
+            modal={
+                'id': 'modal-terms',
+                'title': '',
+                'body': '',
+                },
+            )
+        )
 
     def __init__(self, *args, **kwargs):
-
         self.unlock_terms = kwargs.pop('unlock_terms', False)
 
         super().__init__(*args, **kwargs)
 
+        gdpr = Gdpr.objects.latest('issue_date')
+        self.fields['terms_and_conditions'].widget.modal['title'] = gdpr.title
+        self.fields['terms_and_conditions'].widget.modal['body'] = gdpr.description_as_html
         self.fields['terms_and_conditions'].required = not self.unlock_terms
+
         self.fields['password1'].widget.attrs['placeholder'] = 'Mot de passe'
         self.fields['password2'].widget.attrs['placeholder'] = 'Confirmez le mot de passe'
 
@@ -426,6 +460,8 @@ class UpdateAccountForm(forms.ModelForm):
             self.add_error('password2', 'Vérifiez les mots de passe')
         else:
             self.cleaned_data['password'] = password
+        if not password:
+            del self.cleaned_data['password']
 
         return self.cleaned_data
 
