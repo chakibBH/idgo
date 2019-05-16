@@ -200,7 +200,7 @@ class Command(BaseCommand):
         user.json a été modifié: remplacment de 'auth.user' par 'auth_users.user'
         """
         # On charge les donnée user-profile
-        # self.load_user_profile(data_dir)
+        self.load_user_profile(data_dir)
 
         # On charge le premier lot
         batch = [
