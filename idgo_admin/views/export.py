@@ -36,6 +36,7 @@ from idgo_admin.ckan_module import CkanHandler
 from idgo_admin.models import Dataset
 from idgo_admin.models import LiaisonsReferents
 from idgo_admin.views.dataset import get_filtered_datasets
+from operator import ior
 import unicodecsv
 from urllib.parse import urljoin
 from uuid import UUID

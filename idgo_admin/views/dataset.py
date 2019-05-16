@@ -29,6 +29,7 @@ from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.views import View
+from functools import reduce
 from idgo_admin.ckan_module import CkanHandler
 from idgo_admin.exceptions import CkanBaseError
 from idgo_admin.forms.dataset import DatasetForm as Form
@@ -48,6 +49,7 @@ from idgo_admin.shortcuts import get_object_or_404_extended
 from idgo_admin.shortcuts import render_with_info_profile
 import json
 from math import ceil
+from operator import ior
 
 
 CKAN_URL = settings.CKAN_URL

@@ -211,7 +211,45 @@ class Organisation(models.Model):
     def ows_url(self):
         if MRAHandler.is_workspace_exists(self.slug):
             return OWS_URL_PATTERN.format(organisation=self.slug)
-        # else: return None
+
+    @property
+    def ows_settings(self):
+        if MRAHandler.is_workspace_exists(self.slug):
+            return MRAHandler.get_ows_settings('ows', self.slug)
+
+    @property
+    def members(self):
+        User = get_user_model()
+        Dataset = apps.get_model(app_label='idgo_admin', model_name='Dataset')
+        LiaisonsContributeurs = apps.get_model(app_label='idgo_admin', model_name='LiaisonsContributeurs')
+        LiaisonsReferents = apps.get_model(app_label='idgo_admin', model_name='LiaisonsReferents')
+
+        filter = reduce(ior, [
+            Q(organisation=self.pk),
+            reduce(iand, [
+                Q(liaisonscontributeurs__organisation=self.pk),
+                Q(liaisonscontributeurs__validated_on__isnull=False)
+                ]),
+            reduce(iand, [
+                Q(liaisonsreferents__organisation=self.pk),
+                Q(liaisonsreferents__validated_on__isnull=False),
+                ])
+            ])
+
+        users = User.objects.filter(filter).distinct().order_by('username')
+
+        data = [{
+            'username': member.username,
+            'full_name': member.get_full_name(),
+            'is_member': User.objects.filter(organisation=self.pk, id=member.id).exists(),
+            'is_contributor': LiaisonsContributeurs.objects.filter(profile=member, organisation__id=self.pk, validated_on__isnull=False).exists(),
+            'is_referent': LiaisonsReferents.objects.filter(profile=member, organisation__id=self.pk, validated_on__isnull=False).exists(),
+            'crige_membership': member.crige_membership,
+            'datasets_count': len(Dataset.objects.filter(organisation=self.pk, editor=member)),
+            'profile_id': member.id
+            } for member in users]
+
+        return data
 
     @property
     def api_location(self):

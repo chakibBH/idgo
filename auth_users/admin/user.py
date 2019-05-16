@@ -303,12 +303,6 @@ class UserAdmin(AuthUserAdmin):
         return ' '.join((obj.last_name.upper(), obj.first_name.capitalize()))
     full_name.short_description = 'Nom et prénom'
 
-    def get_actions(self, request):
-        actions = super().get_actions(request)
-        if 'delete_selected' in actions:
-            del actions['delete_selected']
-        return actions
-
     def create_related_liason_contrib(self, instance):
         try:
             LiaisonsContributeurs.objects.get(

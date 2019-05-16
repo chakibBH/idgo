@@ -44,32 +44,13 @@ def render_with_info_profile(
     if not context:
         context = {}
 
-    organisation = (user.organisation and user.membership) and user.organisation
-
-    try:
-        action = AccountActions.objects.get(
-            action='confirm_rattachement', user=user, closed__isnull=True)
-    except Exception:
-        awaiting_member_status = []
-    else:
-        awaiting_member_status = action.organisation \
-            and [action.organisation.id, action.organisation.legal_name]
-
     contributor = [
         [c.id, c.legal_name] for c
         in LiaisonsContributeurs.get_contribs(user=user)]
 
-    awaiting_contributor_status = [
-        [c.id, c.legal_name] for c
-        in LiaisonsContributeurs.get_pending(user=user)]
-
     referent = [
         [c.id, c.legal_name] for c
         in LiaisonsReferents.get_subordinated_organisations(user=user)]
-
-    awaiting_referent_statut = [
-        [c.id, c.legal_name] for c
-        in LiaisonsReferents.get_pending(user=user)]
 
     context.update({
         'contact_email': DEFAULT_CONTACT_EMAIL,
@@ -87,12 +68,8 @@ def render_with_info_profile(
         'is_referent': user.get_roles()['is_referent'],
         'is_contributor': len(contributor) > 0,
         'is_admin': user.is_admin,
-        # 'organisation': organisation,
-        'awaiting_member_status': awaiting_member_status,
         'contributor': contributor,
-        'awaiting_contributor_status': awaiting_contributor_status,
         'referent': referent,
-        'awaiting_referent_statut': awaiting_referent_statut,
         })
 
     return render(request, template_name, context=context,

@@ -1,5 +1,5 @@
 <div id="jurisdictions">
-	<div class="table-responsive">
+	<div class="table-responsive" style="overflow-x: inherit;">
 		<table class="board table table-striped table-bordered table-hover table-condensed">
 			<thead>
 				<tr>
@@ -9,26 +9,28 @@
 				</tr>
 			</thead>
 			<tbody>
-				{% for jurisdiction in jurisdictions %}
-				<tr id="{{ jurisdiction.code }}" name="{{ jurisdiction.code }}">
-					<td name="code">{{ jurisdiction.code }}</td>
-					<td name="name">{{ jurisdiction.name }}</td>
-					{% if jurisdiction.organisations|length > 1 %}
+				{% for jurisdiction_instance in jurisdictions %}
+				<tr id="{{ jurisdiction_instance.code }}" name="{{ jurisdiction_instance.code }}">
+					<td name="code">{{ jurisdiction_instance.code }}</td>
+					<td name="name">{{ jurisdiction_instance.name }}</td>
+					{% if jurisdiction_instance.organisations|length > 1 %}
 					<td name="organisations" class="dropdown table-cell-dropdown">
-						<button class="btn btn-link dropdown-toggle" type="button" data-toggle="dropdown">
-							Voir les {{ jurisdiction.organisations|length }} organisations <span class="caret"></span>
+						<button class="btn btn-link dropdown-toggle" type="button" data-toggle="dropdown" style="text-align: left;">
+							Voir les {{ jurisdiction_instance.organisations|length }} organisations <span class="caret"></span>
 						</button>
-						<ul class="dropdown-menu">{% for organisation in jurisdiction.organisations %}
-							<li>
-								<a href="{% url 'idgo_admin:all_organisations' %}#{{ organisation.pk }}">{{ organisation.legal_name }}</a>
-							</li>{% endfor %}
+						<ul class="dropdown-menu" style="max-height: 404px; overflow-y: scroll;">
+							{% for organisation_instance in jurisdiction_instance.organisations %}
+							<li style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+								<a href="{% url 'idgo_admin:show_organisation' id=organisation_instance.id %}">{{ organisation_instance.legal_name }}</a>
+							</li>
+							{% endfor %}
 						</ul>
 					</td>
 					{% else %}
 					<td name="organisations">
-						{% if jurisdiction.organisations|length == 1 %}
-							{% with jurisdiction.organisations|first as organisation %}
-						<a href='{% url "idgo_admin:all_organisations" %}#{{ organisation.pk }}'>{{ organisation.legal_name }}</a>
+						{% if jurisdiction_instance.organisations|length == 1 %}
+							{% with jurisdiction_instance.organisations|first as organisation_instance %}
+						<a href='{% url "idgo_admin:show_organisation" id=organisation_instance.id %}'>{{ organisation_instance.legal_name }}</a>
 							{% endwith %}
 						{% endif %}
 					</td>
@@ -44,9 +46,8 @@
 			Supprimer <span class="glyphicon glyphicon-trash"></span>
 		</button>
 	</div>
+	{% include "idgo_admin/widgets/paginator.html" with count=pagination.total current=pagination.current %}
 </div>
-{% include "idgo_admin/widgets/paginator.html" with count=pagination.total current=pagination.current %}
-
 <script>
 $(function() {
 	const $window = $(window);
@@ -82,7 +83,6 @@ $(function() {
 	const $actions = $div.find('#actions');
 	const $delete = $actions.find('[name="delete"]');
 	const $edit = $actions.find('[name="edit"]');
-
 	const $table = $div.find('table');
 
 	$table.find('tr>th>a[name="sort"]')

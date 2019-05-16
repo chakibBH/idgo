@@ -14,10 +14,7 @@
 # under the License.
 
 from django.contrib import admin
-from django.contrib.auth import get_user_model
 from auth_users.models.gdpr import Gdpr
-
-User = get_user_model()
 
 
 class GdprAdmin(admin.ModelAdmin):

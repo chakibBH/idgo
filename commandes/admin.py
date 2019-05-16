@@ -72,7 +72,7 @@ class OrderAdmin(admin.ModelAdmin):
         if obj:
             return obj.applicant.organisation
     orga.short_description = 'Organisation'
-    orga.admin_order_field = 'applicant__profile__organisation'
+    orga.admin_order_field = 'applicant__organisation'
 
     def user_full_name(self, obj):
         if obj:
@@ -88,7 +88,7 @@ class OrderAdmin(admin.ModelAdmin):
     export_as_csv_action.short_description = "Exporter en CSV"
     email_cadastre_wrong_files.short_description = "E-mail documents invalides"
     email_cadastre_habilitation.short_description = "E-mail pas d'habilitation"
-    ordering = ('applicant__profile__organisation', 'applicant__last_name',)
+    ordering = ('applicant__organisation', 'applicant__last_name',)
 
 
 admin.site.register(Order, OrderAdmin)
